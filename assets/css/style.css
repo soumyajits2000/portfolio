@@ -1034,12 +1034,12 @@ main {
   #BLOG
 \*-----------------------------------*/
 
-.blog-posts { margin-bottom: 10px; }
+.blog-posts { margin-bottom: 5px; }
 
 .blog-posts-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 20px;
+  gap: 10px;
 }
 
 .blog-post-item > a {
@@ -1095,7 +1095,7 @@ main {
 .blog-meta .dot {
   background: var(--light-gray-70);
   width: 4px;
-  height: 4px;
+  height: 1px;
   border-radius: 4px;
 }
 
