@@ -28,7 +28,7 @@
     hsl(240, 1%, 25%) 3%, 
     hsl(0, 0%, 19%) 97%
   );*/
-  --bg-gradient-jet: hsla(45, 100%, 71%, 0.251);
+  --bg-gradient-jet: hsla(45, 100%, 71%, 0.403);
   /*
   --bg-gradient-yellow-1: linear-gradient(
     to bottom right, 
@@ -62,7 +62,7 @@
   --white-2: hsl(0, 0%, 7%);/*Color of heading of small font --white-2: hsl(0, 0%, 98%); */
   --orange-yellow-crayola: hsl(45, 100%, 72%);
   --vegas-gold: hsl(45, 54%, 58%);
-  --light-gray: hsl(0, 0%, 84%);
+  --light-gray: hsl(0, 0%, 0%);
   --light-gray-70: hsla(0, 0%, 13%, 0.7); /*small text in left panel--light-gray-70: hsla(0, 0%, 84%, 0.7);*/
   --bittersweet-shimmer: hsl(0, 43%, 51%);
 
@@ -71,7 +71,7 @@
    */
 
   /* font-family */
-  --ff-poppins: 'Poppins', sans-serif;
+  --ff-poppins: 'IBM Plex Sans', sans-serif;
 
   /* font-size */
   --fs-1: 24px;
@@ -382,7 +382,7 @@ main {
   right: -15px;
   border-radius: 0 15px;
   font-size: 13px;
-  color: var(--orange-yellow-crayola);
+  color: #000;
   background: var(--border-gradient-onyx);
   padding: 10px;
   box-shadow: var(--shadow-2);
@@ -520,7 +520,7 @@ main {
 .about .article-title { margin-bottom: 15px; }
 
 .about-text {
-  color: var(--light-gray);
+  color: #000;
   font-size: var(--fs-6);
   font-weight: var(--fw-300);
   line-height: 1.6;
@@ -1078,7 +1078,7 @@ main {
   position: absolute;
   inset: 1px;
   border-radius: inherit;
-  background: var(--eerie-black-1);
+  background: #f0f0f2;
   z-index: -1;
 }
 
