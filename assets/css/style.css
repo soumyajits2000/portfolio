@@ -71,7 +71,7 @@
    */
 
   /* font-family */
-  --ff-poppins: 'IBM Plex Sans', sans-serif;
+  --ff-poppins: 'IBM Plex Sans', Helvetica, sans-serif;
 
   /* font-size */
   --fs-1: 24px;
