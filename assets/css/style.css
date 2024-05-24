@@ -1204,7 +1204,7 @@ textarea.form-input::-webkit-resizer { display: none; }
   position: relative;
   width: 100%;
   background: var(--border-gradient-onyx);
-  color: var(--orange-yellow-crayola);
+  color: #000;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1242,6 +1242,52 @@ textarea.form-input::-webkit-resizer { display: none; }
 .form-btn:disabled:hover { background: var(--border-gradient-onyx); }
 
 .form-btn:disabled:hover::before { background: var(--bg-gradient-jet); }
+
+
+
+.cv-btn {
+  position: relative;
+  width: 50%;
+  background: var(--border-gradient-onyx);
+  color: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 20px;
+  border-radius: 14px;
+  font-size: var(--fs-6);
+  text-transform: capitalize;
+  box-shadow: var(--shadow-3);
+  z-index: 1;
+  transition: var(--transition-1);
+}
+
+.cv-btn::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: var(--bg-gradient-jet);
+  border-radius: inherit;
+  z-index: -1;
+  transition: var(--transition-1);
+}
+
+.cv-btn ion-icon { font-size: 16px; }
+
+.cv-btn:hover { background: var(--bg-gradient-yellow-1); }
+
+.cv-btn:hover::before { background: var(--bg-gradient-yellow-2); }
+
+.cv-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.cv-btn:disabled:hover { background: var(--border-gradient-onyx); }
+
+.cv-btn:disabled:hover::before { background: var(--bg-gradient-jet); }
+
 
 
 
@@ -1893,7 +1939,15 @@ textarea.form-input::-webkit-resizer { display: none; }
 
   .social-list { justify-content: center; }
 
+  a.no-visited-color:link,
+  a.no-visited-color:visited {
+  color: #0066cc;
+}
 
+  a.no-visited-color:hover,
+  a.no-visited-color:active {
+  color: #004488;
+}
 
   /**
 	 * RESUME
