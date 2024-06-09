@@ -45,12 +45,13 @@
     hsl(0, 0%, 25%) 0%, 
     hsla(0, 0%, 25%, 0) 50%
   );
+  */
   --text-gradient-yellow: linear-gradient(
     to right, 
     hsl(45, 100%, 72%), 
     hsl(35, 100%, 68%)
   );
-*/
+
   /* solid */
 
   --jet: hsl(0, 0%, 22%); /*lines and borders*/
