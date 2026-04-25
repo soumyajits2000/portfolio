@@ -1,8 +1,27 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowDownRight, MapPin } from "lucide-react";
-import { profile, news } from "../../data/mock";
+import { profile, news as fallbackNews } from "../../data/mock";
+import { api } from "../../lib/api";
 
 const Hero = () => {
+  const [news, setNews] = useState(fallbackNews);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/news")
+      .then((r) => {
+        if (cancelled) return;
+        if (Array.isArray(r.data) && r.data.length) setNews(r.data);
+      })
+      .catch(() => {
+        // silent fallback to mock — hero must never look broken
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <section id="home" className="pt-16 md:pt-24 pb-20 md:pb-28">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">

@@ -3,27 +3,37 @@ import { Mail, Github, Linkedin, FileText, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { profile } from "../../data/mock";
 import { SectionTitle } from "./About";
+import { api } from "../../lib/api";
 
 const Contact = () => {
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
   const [sending, setSending] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.message) {
       toast.error("Please fill in your name, email and message.");
       return;
     }
     setSending(true);
-    // Mock send — store in localStorage
-    const stored = JSON.parse(localStorage.getItem("contact_messages") || "[]");
-    stored.push({ ...form, ts: new Date().toISOString() });
-    localStorage.setItem("contact_messages", JSON.stringify(stored));
-    setTimeout(() => {
-      setSending(false);
+    try {
+      await api.post("/contact", {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        subject: form.subject.trim() || null,
+        message: form.message.trim(),
+      });
       setForm({ name: "", email: "", subject: "", message: "" });
-      toast.success("Thank you. Your message has been recorded.");
-    }, 700);
+      toast.success("Thank you. Your message has been received.");
+    } catch (err) {
+      const detail =
+        err?.response?.data?.detail?.[0]?.msg ||
+        err?.response?.data?.detail ||
+        "Something went wrong. Please try again.";
+      toast.error(typeof detail === "string" ? detail : "Please check your inputs.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const onChange = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -60,7 +70,7 @@ const Contact = () => {
 
           <div className="flex items-center justify-between pt-2">
             <p className="text-[12px] text-[#5a5a5a]">
-              Messages are stored locally for now — a backend will be wired in next.
+              Messages are securely received over our API.
             </p>
             <button
               type="submit"
