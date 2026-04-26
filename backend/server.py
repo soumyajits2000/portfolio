@@ -62,6 +62,48 @@ class NewsItemOut(BaseModel):
     created_at: str
 
 
+class ResearchLink(BaseModel):
+    label: str = Field(..., min_length=1, max_length=40)
+    url: str = Field(..., min_length=1, max_length=600)
+
+
+class ResearchItemIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=300)
+    role: Optional[str] = Field(None, max_length=120)
+    advisor: Optional[str] = Field(None, max_length=200)
+    institution: Optional[str] = Field(None, max_length=200)
+    period: Optional[str] = Field(None, max_length=80)
+    summary: str = Field(..., min_length=1, max_length=4000)
+    tags: List[str] = Field(default_factory=list)
+    links: List[ResearchLink] = Field(default_factory=list)
+
+
+class ResearchItemPatch(BaseModel):
+    title: Optional[str] = None
+    role: Optional[str] = None
+    advisor: Optional[str] = None
+    institution: Optional[str] = None
+    period: Optional[str] = None
+    summary: Optional[str] = None
+    tags: Optional[List[str]] = None
+    links: Optional[List[ResearchLink]] = None
+
+
+class ResearchItemOut(BaseModel):
+    id: str
+    title: str
+    role: Optional[str] = None
+    advisor: Optional[str] = None
+    institution: Optional[str] = None
+    period: Optional[str] = None
+    summary: str
+    tags: List[str] = []
+    links: List[ResearchLink] = []
+    order: int = 0
+    created_at: str
+    updated_at: Optional[str] = None
+
+
 # Fallback news (mirrors the mock.js seed; used if collection is empty)
 SEED_NEWS = [
     {"date": "Sep 2024", "text": "Beginning my PhD with Prof. Dmitri Efetov at LMU Munich."},
@@ -73,6 +115,115 @@ SEED_NEWS = [
     {
         "date": "2023",
         "text": "Joined the Nanoelectronics Group at TIFR Mumbai for MS thesis with Prof. Mandar M. Deshmukh.",
+    },
+]
+
+
+SEED_RESEARCH = [
+    {
+        "id": "seed-r1",
+        "title": "Superconducting Coplanar Waveguide Resonator-assisted Microwave Probing of 2D Materials",
+        "role": "Master\u2019s Thesis",
+        "advisor": "Prof. Mandar M. Deshmukh",
+        "institution": "TIFR, Mumbai",
+        "period": "2023 \u2014 2024",
+        "summary": (
+            "Capacitively coupled van der Waals heterostructures (bilayer graphene, twisted "
+            "double bilayer & trilayer graphene) to a 1\u201310 GHz transmission-line resonator "
+            "(Q \u2248 500) to extract capacitance and density of states without optical contact. "
+            "A portion of this work appeared in ACS Nano Letters."
+        ),
+        "tags": ["Superconducting resonators", "Twisted graphene", "RF transport"],
+        "links": [
+            {"label": "Paper", "url": "https://pubs.acs.org/doi/full/10.1021/acs.nanolett.3c04990"},
+            {"label": "Group", "url": "https://www.tifr.res.in/~nano/"},
+        ],
+    },
+    {
+        "id": "seed-r2",
+        "title": "Numerical Simulation of DNA Detection using Graphene FETs",
+        "role": "Independent Project",
+        "advisor": "Dr. Achanta Venugopal",
+        "institution": "TIFR, Mumbai",
+        "period": "2022",
+        "summary": (
+            "Monte-Carlo + numerical models for the electrostatic potential and I-V "
+            "characteristics of a graphene FET in the presence of charged biomolecules \u2014 "
+            "mapping the sensitivity of GFETs as DNA biosensors."
+        ),
+        "tags": ["GFET", "Biosensing", "Numerical methods"],
+        "links": [{"label": "Code", "url": "https://github.com/soumyajits2000/GFET-DNA_Detection"}],
+    },
+    {
+        "id": "seed-r3",
+        "title": "Dielectric environment in graphene via Deep Learning of Raman Spectra",
+        "role": "Research Project",
+        "advisor": "Prof. Radha Krishna & Dr. Gopi Krishna Guntupalli",
+        "institution": "IISER Berhampur",
+        "period": "2022",
+        "summary": (
+            "Designed a CNN classifier on augmented Raman spectra (additive noise, peak shifting) "
+            "to infer charge density and dielectric environment of graphene with 99% test accuracy."
+        ),
+        "tags": ["Raman", "CNN", "Graphene"],
+        "links": [{"label": "Code", "url": "https://github.com/soumyajits2000/graphene_env_properties"}],
+    },
+    {
+        "id": "seed-r4",
+        "title": "Predicting Critical Temperature of Superconductors with ML",
+        "role": "Course Project",
+        "advisor": "Prof. Radha Krishna & Dr. Gopi Krishna Guntupalli",
+        "institution": "IISER Berhampur",
+        "period": "2021",
+        "summary": (
+            "Feature engineering on the SuperCon database and a regression pipeline that predicts "
+            "critical temperature from room-temperature properties (98.8% accuracy)."
+        ),
+        "tags": ["Machine Learning", "Superconductivity"],
+        "links": [{"label": "Code", "url": "https://github.com/soumyajits2000/superconductors_prediction_ML"}],
+    },
+    {
+        "id": "seed-r5",
+        "title": "Wi-Fi Indoor Localisation via Quantum Machine Learning",
+        "role": "Visiting Researcher",
+        "advisor": "Dr. Ahmed Farouk",
+        "institution": "Wilfrid Laurier University, Canada",
+        "period": "2021",
+        "summary": (
+            "A Qiskit-based quantum simulation of a CML algorithm for localising users inside "
+            "large structures using ambient Wi-Fi access points \u2014 with applications to "
+            "post-disaster reconnaissance."
+        ),
+        "tags": ["Qiskit", "QML", "Localisation"],
+        "links": [],
+    },
+    {
+        "id": "seed-r6",
+        "title": "Quantum Simulation of Graphene (VQE)",
+        "role": "Summer Research",
+        "advisor": "Prof. Prashanta Kumar Panigrahi",
+        "institution": "IISER Kolkata",
+        "period": "2021",
+        "summary": (
+            "Variational Quantum Eigensolver with Qiskit Nature to estimate ground-state and "
+            "low-lying excited-state energies of small graphene fragments."
+        ),
+        "tags": ["VQE", "Quantum Chemistry"],
+        "links": [],
+    },
+    {
+        "id": "seed-r7",
+        "title": "Fabrication of Microscale Metallic Contacts on Exfoliated Graphene",
+        "role": "Internship",
+        "advisor": "Dr. Satyaprakash Sahoo",
+        "institution": "Institute of Physics, Bhubaneswar",
+        "period": "2020",
+        "summary": (
+            "Mechanically exfoliated graphene flakes contacted with Au, Ag, Al via photolithography. "
+            "Optimised photoresist (ma-P 1205) thickness and lift-off chemistry."
+        ),
+        "tags": ["Photolithography", "Exfoliation"],
+        "links": [],
     },
 ]
 
@@ -147,6 +298,91 @@ async def delete_news(news_id: str):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="News item not found")
     return {"ok": True, "deleted": news_id}
+
+
+# ----- Research Experience -----
+def _research_doc_to_out(doc: dict) -> ResearchItemOut:
+    # Pydantic will coerce links into ResearchLink list
+    return ResearchItemOut(**{k: v for k, v in doc.items() if k != "_id"})
+
+
+@api_router.get("/research", response_model=List[ResearchItemOut])
+async def list_research():
+    cursor = db.research.find({}, {"_id": 0}).sort([("order", 1), ("created_at", 1)])
+    items = [doc async for doc in cursor]
+    if not items:
+        now = _now_iso()
+        return [
+            ResearchItemOut(**{**seed, "order": i, "created_at": now})
+            for i, seed in enumerate(SEED_RESEARCH)
+        ]
+    return [_research_doc_to_out(d) for d in items]
+
+
+@api_router.get("/research/{item_id}", response_model=ResearchItemOut)
+async def get_research(item_id: str):
+    doc = await db.research.find_one({"id": item_id}, {"_id": 0})
+    if not doc:
+        # allow fetching seeded fallback by id too
+        for i, s in enumerate(SEED_RESEARCH):
+            if s["id"] == item_id:
+                return ResearchItemOut(**{**s, "order": i, "created_at": _now_iso()})
+        raise HTTPException(status_code=404, detail="Research item not found")
+    return _research_doc_to_out(doc)
+
+
+@api_router.post("/research", response_model=ResearchItemOut, status_code=status.HTTP_201_CREATED)
+async def create_research(payload: ResearchItemIn):
+    now = _now_iso()
+    # next order = current max + 1 (or 0 if empty)
+    last = await db.research.find_one({}, sort=[("order", -1)])
+    next_order = (last["order"] + 1) if last and "order" in last else 0
+    doc = {
+        "id": str(uuid.uuid4()),
+        "title": payload.title.strip(),
+        "role": (payload.role or "").strip() or None,
+        "advisor": (payload.advisor or "").strip() or None,
+        "institution": (payload.institution or "").strip() or None,
+        "period": (payload.period or "").strip() or None,
+        "summary": payload.summary.strip(),
+        "tags": [t.strip() for t in payload.tags if t and t.strip()],
+        "links": [link.model_dump() for link in payload.links],
+        "order": next_order,
+        "created_at": now,
+        "updated_at": None,
+    }
+    await db.research.insert_one(doc)
+    return _research_doc_to_out(doc)
+
+
+@api_router.patch("/research/{item_id}", response_model=ResearchItemOut)
+async def update_research(item_id: str, patch: ResearchItemPatch):
+    update = {k: v for k, v in patch.model_dump(exclude_unset=True).items() if v is not None}
+    if "links" in update:
+        update["links"] = [
+            link if isinstance(link, dict) else link.model_dump() for link in update["links"]
+        ]
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields provided to update")
+    update["updated_at"] = _now_iso()
+
+    res = await db.research.find_one_and_update(
+        {"id": item_id},
+        {"$set": update},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Research item not found")
+    return _research_doc_to_out(res)
+
+
+@api_router.delete("/research/{item_id}")
+async def delete_research(item_id: str):
+    res = await db.research.delete_one({"id": item_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Research item not found")
+    return {"ok": True, "deleted": item_id}
 
 
 # Mount router & middleware

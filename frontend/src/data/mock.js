@@ -171,7 +171,11 @@ export const researchProjects = [
     period: "2023 \u2014 2024",
     summary:
       "Capacitively coupled van der Waals heterostructures (bilayer graphene, twisted double bilayer & trilayer graphene) to a 1\u201310 GHz transmission\u2011line resonator (Q \u2248 500) to extract capacitance and density of states without optical contact. A portion of this work appeared in ACS Nano Letters.",
-    tags: ["Superconducting resonators", "Twisted graphene", "RF transport"]
+    tags: ["Superconducting resonators", "Twisted graphene", "RF transport"],
+    links: [
+      { label: "Paper", url: "https://pubs.acs.org/doi/full/10.1021/acs.nanolett.3c04990" },
+      { label: "Group", url: "https://www.tifr.res.in/~nano/" }
+    ]
   },
   {
     id: "r2",
@@ -182,7 +186,10 @@ export const researchProjects = [
     period: "2022",
     summary:
       "Monte\u2011Carlo + numerical models for the electrostatic potential and I\u2011V characteristics of a graphene FET in the presence of charged biomolecules \u2014 mapping the sensitivity of GFETs as DNA biosensors.",
-    tags: ["GFET", "Biosensing", "Numerical methods"]
+    tags: ["GFET", "Biosensing", "Numerical methods"],
+    links: [
+      { label: "Code", url: "https://github.com/soumyajits2000/GFET-DNA_Detection" }
+    ]
   },
   {
     id: "r3",
@@ -194,7 +201,10 @@ export const researchProjects = [
     period: "2022",
     summary:
       "Designed a CNN classifier on augmented Raman spectra (additive noise, peak shifting) to infer charge density and dielectric environment of graphene with 99% test accuracy.",
-    tags: ["Raman", "CNN", "Graphene"]
+    tags: ["Raman", "CNN", "Graphene"],
+    links: [
+      { label: "Code", url: "https://github.com/soumyajits2000/graphene_env_properties" }
+    ]
   },
   {
     id: "r4",
@@ -205,7 +215,10 @@ export const researchProjects = [
     period: "2021",
     summary:
       "Feature engineering on the SuperCon database and a regression pipeline that predicts critical temperature from room\u2011temperature properties (98.8% accuracy).",
-    tags: ["Machine Learning", "Superconductivity"]
+    tags: ["Machine Learning", "Superconductivity"],
+    links: [
+      { label: "Code", url: "https://github.com/soumyajits2000/superconductors_prediction_ML" }
+    ]
   },
   {
     id: "r5",
@@ -216,7 +229,8 @@ export const researchProjects = [
     period: "2021",
     summary:
       "A Qiskit\u2011based quantum simulation of a CML algorithm for localising users inside large structures using ambient Wi\u2011Fi access points \u2014 with applications to post\u2011disaster reconnaissance.",
-    tags: ["Qiskit", "QML", "Localisation"]
+    tags: ["Qiskit", "QML", "Localisation"],
+    links: []
   },
   {
     id: "r6",
@@ -227,7 +241,8 @@ export const researchProjects = [
     period: "2021",
     summary:
       "Variational Quantum Eigensolver with Qiskit Nature to estimate ground\u2011state and low\u2011lying excited\u2011state energies of small graphene fragments.",
-    tags: ["VQE", "Quantum Chemistry"]
+    tags: ["VQE", "Quantum Chemistry"],
+    links: []
   },
   {
     id: "r7",
@@ -239,7 +254,8 @@ export const researchProjects = [
     period: "2020",
     summary:
       "Mechanically exfoliated graphene flakes contacted with Au, Ag, Al via photolithography. Optimised photoresist (ma\u2011P 1205) thickness and lift\u2011off chemistry.",
-    tags: ["Photolithography", "Exfoliation"]
+    tags: ["Photolithography", "Exfoliation"],
+    links: []
   }
 ];
 

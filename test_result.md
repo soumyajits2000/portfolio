@@ -167,6 +167,45 @@ backend:
           DELETE removes items correctly and returns 200. DELETE with non-existent ID returns 404 as expected. 
           CORS headers present with Access-Control-Allow-Origin: *.
 
+  - task: "Research Experience CRUD: GET/POST/PATCH/DELETE /api/research"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          GET /api/research returns collection items sorted by (order asc, created_at asc); if
+          collection is empty, returns 7 seeded fallback items (ids "seed-r1".."seed-r7") each with
+          a `links` array of {label,url}. GET /api/research/{id} returns one item (works for both
+          real and seeded ids; 404 otherwise). POST creates a new item (201) — payload validates
+          title>=1 and summary>=1; tags and links default to []; assigns next `order`. PATCH
+          partial-updates any subset of fields (especially `links` which is the headline use case)
+          and bumps `updated_at`. DELETE removes by id, 404 when missing. Field `links` items must
+          have `label` (1-40 chars) and `url` (1-600 chars) — invalid links should produce 422.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: All 13 Research CRUD test steps completed successfully! Comprehensive testing performed:
+          1. GET /api/research empty collection → 7 seeded items with correct structure (seed-r1 has Paper link with acs.nanolett + Group link)
+          2. GET /api/research/seed-r1 → HTTP 200 with correct seeded item
+          3. GET /api/research/non-existent → HTTP 404
+          4. POST /api/research → HTTP 201 with real UUID, order field, created_at, links preserved
+          5. GET /api/research after POST → real items returned (no seeded fallback)
+          6. PATCH /api/research/{id} → HTTP 200 with updated links and updated_at timestamp
+          7. PATCH empty body → HTTP 400 "No fields provided to update"
+          8. PATCH non-existent → HTTP 404
+          9. POST invalid links (missing url) → HTTP 422 validation error
+          10. POST long label (60 chars) → HTTP 422 "String should have at most 40 characters"
+          11. DELETE /api/research/{id} → HTTP 200 with {"ok":true,"deleted":<id>}
+          12. DELETE again → HTTP 404
+          13. GET after DELETE → test item gone, seeded fallback reappeared
+          All CRUD operations, validation, error handling, and data persistence working perfectly.
+
+
 frontend:
   - task: "Contact form wired to backend"
     implemented: true
@@ -212,6 +251,27 @@ agent_communication:
       Validation matters: invalid email on /api/contact must return 422; empty news collection must
       return seeded fallback (4 items with id starting "seed-"); created news item must appear first
       in subsequent GET. After tests, please clean up created data where reasonable.
+  - agent: "main"
+    message: |
+      New scope: please verify the /api/research CRUD endpoints. Coverage needed:
+      (a) GET /api/research on empty collection → returns 7 seeded items (ids seed-r1..seed-r7),
+          each item must contain a `links` array (some non-empty, some empty), `tags` array, and
+          `order` integer.
+      (b) GET /api/research/seed-r1 → returns the seeded item directly without 404.
+      (c) POST /api/research with full payload (title, summary, role, advisor, institution,
+          period, tags, links=[{label,url},{label,url}]) → 201, returns new item with uuid id,
+          order=N, links preserved.
+      (d) GET /api/research → newly created item now appears in the list (and seeded fallback
+          should NO longer be returned because collection is non-empty).
+      (e) PATCH /api/research/{new_id} with body {"links":[{"label":"Updated","url":"https://x"}]}
+          → 200, returns item with updated links and an updated_at timestamp.
+      (f) PATCH with empty body → 400.
+      (g) PATCH /api/research/non-existent → 404.
+      (h) DELETE /api/research/{new_id} → 200; subsequent GET no longer contains it.
+      (i) DELETE /api/research/non-existent → 404.
+      (j) POST with invalid `links` (e.g. missing url, label > 40 chars) → 422.
+      Re-run the previously verified contact/news tests is not necessary unless you suspect
+      regressions.
   - agent: "testing"
     message: |
       ✅ BACKEND TESTING COMPLETE: All 15 test cases PASSED! 
@@ -224,3 +284,25 @@ agent_communication:
       4. CORS headers: ✅ Properly configured
       
       All backend functionality is production-ready. No issues found. Backend APIs are fully functional.
+  - agent: "testing"
+    message: |
+      ✅ RESEARCH CRUD TESTING COMPLETE: All 13 test steps PASSED perfectly!
+      
+      Executed comprehensive Research Experience CRUD endpoint testing following the exact test plan:
+      
+      🎯 Test Results Summary:
+      • GET /api/research (empty) → ✅ Returns 7 seeded items with correct structure
+      • GET /api/research/seed-r1 → ✅ Returns seeded item (HTTP 200, not 404)
+      • GET /api/research/non-existent → ✅ Returns 404
+      • POST /api/research → ✅ Creates item with HTTP 201, real UUID, proper structure
+      • GET /api/research (after POST) → ✅ Returns real items, no seeded fallback
+      • PATCH /api/research/{id} → ✅ Updates links, sets updated_at timestamp
+      • PATCH empty body → ✅ Returns 400 "No fields provided to update"
+      • PATCH non-existent → ✅ Returns 404
+      • POST invalid links (missing url) → ✅ Returns 422 validation error
+      • POST long label (>40 chars) → ✅ Returns 422 validation error
+      • DELETE /api/research/{id} → ✅ Returns 200 with {"ok":true,"deleted":<id>}
+      • DELETE again → ✅ Returns 404
+      • GET after DELETE → ✅ Test item gone, seeded fallback reappears
+      
+      All Research CRUD endpoints are production-ready with perfect validation, error handling, and data persistence.
