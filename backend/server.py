@@ -442,7 +442,7 @@ async def list_contact_messages(limit: int = 50, _: dict = Depends(require_admin
 # ----- News -----
 @api_router.get("/news", response_model=List[NewsItemOut])
 async def list_news():
-    cursor = db.news.find({}, {"_id": 0}).sort("created_at", -1)
+    cursor = db.news.find({}, {"_id": 0}).sort("created_at", -1).limit(100)
     items = [doc async for doc in cursor]
     if not items:
         # return seeded fallback (do not write — keeps DB clean)
@@ -482,7 +482,11 @@ def _research_doc_to_out(doc: dict) -> ResearchItemOut:
 
 @api_router.get("/research", response_model=List[ResearchItemOut])
 async def list_research():
-    cursor = db.research.find({}, {"_id": 0}).sort([("order", 1), ("created_at", 1)])
+    cursor = (
+        db.research.find({}, {"_id": 0})
+        .sort([("order", 1), ("created_at", 1)])
+        .limit(200)
+    )
     items = [doc async for doc in cursor]
     if not items:
         now = _now_iso()
