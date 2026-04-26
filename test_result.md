@@ -295,7 +295,7 @@ backend:
 frontend:
   - task: "Contact form wired to backend"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/components/sections/Contact.jsx"
     stuck_count: 0
     priority: "medium"
@@ -304,10 +304,18 @@ frontend:
       - working: "NA"
         agent: "main"
         comment: "Replaced localStorage stub with axios POST to /api/contact + toast feedback."
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: Contact form fully functional. Tested with realistic data (Dr. Elena Rodriguez, collaboration inquiry).
+          - Form submission successful with proper toast message "Thank you. Your message has been received."
+          - Form fields reset correctly after submission
+          - Validation working: empty name field triggers error toast
+          - All form fields (name, email, subject, message) working correctly
 
   - task: "Hero news fetched from backend with mock fallback"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/components/sections/Hero.jsx"
     stuck_count: 0
     priority: "low"
@@ -316,6 +324,121 @@ frontend:
       - working: "NA"
         agent: "main"
         comment: "useEffect calls /api/news; falls back silently to mock news on error/empty."
+      - working: true
+        agent: "testing"
+        comment: "✅ PASSED: Hero section renders correctly with news items displayed. Backend integration working with fallback to mock data."
+
+  - task: "Public homepage - all 11 sections render"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/Portfolio.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: Homepage renders correctly with all major sections:
+          - Hero section with correct headline "Probing the quantum life of two-dimensional materials" (italic burgundy styling on "two-dimensional" ✓)
+          - Smooth-scroll navigation working (tested with #research link)
+          - All 11 sections found: Hero, About, Research Interests, Publications, Experience, Projects, Education, Awards (id="awards"), Teaching, Gallery, Contact
+          - No broken images (18 images loaded successfully)
+          - Note: Section IDs are "awards" (not "talks") and "teaching" (confirmed present)
+
+  - task: "Gallery filter and lightbox"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/sections/Gallery.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: Gallery functionality fully working:
+          - 12 gallery images render correctly
+          - Filter buttons work: "Lab" filter reduces to 2 images, "All" restores 12 images
+          - Lightbox opens when clicking gallery image
+          - Lightbox closes when clicking overlay
+          - All gallery categories functional (All, Astrophotography, Lab, Academic, Outreach)
+
+  - task: "Blog list and post pages"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/Blog.jsx, /app/frontend/src/pages/BlogPost.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: Blog functionality fully working:
+          - /blog page renders with correct heading "Thinking out loud, in ink and equations" (italic "ink" ✓)
+          - Featured post card displays with "Featured" badge
+          - 4 blog post links found (featured + 3 in grid)
+          - Individual blog post page renders correctly with:
+            * Article content and cover image
+            * Proper typography and layout
+            * "All writing" back link working
+          - Navigation between blog list and posts working correctly
+
+  - task: "Admin auth gate and login page"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/AdminLogin.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: Admin authentication gate working correctly:
+          - Unauthenticated access to /admin/research redirects to /admin/login ✓
+          - Login page displays correct heading "Sign in to manage your research archive"
+          - "Sign in with Google" button present and functional
+          - OAuth redirect URL correct: https://auth.emergentagent.com/?redirect=https://academic-archive-3.preview.emergentagent.com/admin/research
+          - Redirect parameter properly includes /admin/research path
+
+  - task: "Admin dashboard with CRUD operations"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/AdminResearch.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: Admin dashboard fully functional with complete CRUD operations:
+          - Dashboard loads with correct heading "Add, edit & link your projects"
+          - User email (soumyajits2000@gmail.com) displayed in header
+          - "Sign out" button present and working
+          - 7+ seeded research items displayed with "seed" badges
+          - "New entry" button functional
+          
+          CREATE: Successfully created new research entry "Quantum Transport in Twisted Trilayer Graphene" with:
+          - Title, summary, tags, and link (arXiv Preprint)
+          - Success toast appeared
+          - New item appears in list without seed badge
+          
+          UPDATE: Successfully edited the created item:
+          - Form pre-filled with existing data
+          - Summary updated successfully
+          - Success toast appeared
+          
+          DELETE: Successfully deleted the created item:
+          - Confirmation dialog appeared
+          - Success toast appeared
+          - Item removed from list
+          
+          SIGN OUT: Successfully signed out and redirected to /admin/login
+          
+          All admin functionality working perfectly with proper session management.
 
 metadata:
   created_by: "main_agent"
@@ -324,10 +447,18 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Public site renders all sections correctly"
+    - "Contact form submits via API"
+    - "Admin gate: unauthenticated → /admin/login"
+    - "Admin login page has working Google sign-in button"
+    - "Admin dashboard works with seeded session cookie"
+    - "Blog list and post pages render"
+    - "Gallery filter & lightbox"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+  run_ui: true
 
 agent_communication:
   - agent: "main"
@@ -413,3 +544,54 @@ agent_communication:
       
       Authentication layer is production-ready. Bearer token fallback functional. Admin protection working correctly.
       All test data cleaned up successfully. No issues found.
+  - agent: "testing"
+    message: |
+      ✅ COMPREHENSIVE END-TO-END UI TESTING COMPLETE: All major test scenarios PASSED!
+      
+      Executed full UI testing playbook covering all sections (A-G) of the Soumyajit Samal research portfolio:
+      
+      📱 PUBLIC HOMEPAGE (Section A):
+      • Hero section renders with correct headline "Probing the quantum life of two-dimensional materials" ✅
+      • Italic burgundy styling on "two-dimensional" confirmed ✅
+      • Smooth-scroll navigation working (#research link) ✅
+      • All 11 sections render correctly (Hero, About, Research, Publications, Experience, Projects, Education, Awards, Teaching, Gallery, Contact) ✅
+      • No broken images (18 images loaded successfully) ✅
+      
+      📧 CONTACT FORM (Section B):
+      • Form submission successful with realistic data ✅
+      • Success toast "Thank you. Your message has been received." appears ✅
+      • Form fields reset after submission ✅
+      • Validation working (empty name triggers error) ✅
+      
+      🖼️ GALLERY (Section C):
+      • 12 gallery images render correctly ✅
+      • Filter functionality working (Lab filter → 2 images, All → 12 images) ✅
+      • Lightbox opens on image click ✅
+      • Lightbox closes on overlay click ✅
+      
+      📝 BLOG (Section D):
+      • /blog page renders with correct heading "Thinking out loud, in ink and equations" ✅
+      • Featured post card with badge displayed ✅
+      • 4 blog post links found (featured + 3 in grid) ✅
+      • Individual blog post renders with cover image and content ✅
+      • "All writing" back link working ✅
+      
+      🔐 ADMIN AUTH GATE (Section E):
+      • Unauthenticated /admin/research redirects to /admin/login ✅
+      • Login page displays correct heading and Google sign-in button ✅
+      • OAuth redirect URL correct (https://auth.emergentagent.com/?redirect=.../admin/research) ✅
+      
+      🛠️ ADMIN DASHBOARD (Section F):
+      • Dashboard loads with correct heading and user email ✅
+      • 7+ seeded research items with "seed" badges displayed ✅
+      • CREATE: New research entry created successfully ✅
+      • UPDATE: Entry edited and saved successfully ✅
+      • DELETE: Entry deleted and removed from list ✅
+      • SIGN OUT: Successfully logged out and redirected ✅
+      
+      🧹 CLEANUP (Section G):
+      • Test data cleaned up successfully ✅
+      
+      📊 Console Errors: 6 (all 401 errors from auth checks before login - expected behavior)
+      
+      🎉 ALL UI FUNCTIONALITY WORKING PERFECTLY! Application is production-ready.
