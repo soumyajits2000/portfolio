@@ -9,6 +9,7 @@ import EducationSection from "./sections/Education";
 import CodeProjects from "./sections/CodeProjects";
 import TalksAwards from "./sections/TalksAwards";
 import Teaching from "./sections/Teaching";
+import Gallery from "./sections/Gallery";
 import Contact from "./sections/Contact";
 import Footer from "./sections/Footer";
 
@@ -42,6 +43,7 @@ const Portfolio = () => {
         <EducationSection />
         <TalksAwards />
         <Teaching />
+        <Gallery />
         <Contact />
       </main>
       <Footer />
