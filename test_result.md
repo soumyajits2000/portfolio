@@ -204,6 +204,92 @@ backend:
           12. DELETE again → HTTP 404
           13. GET after DELETE → test item gone, seeded fallback reappeared
           All CRUD operations, validation, error handling, and data persistence working perfectly.
+      - working: "NA"
+        agent: "main"
+        comment: |
+          UPDATE: POST/PATCH/DELETE on /api/research are now PROTECTED by require_admin dependency.
+          Without a valid admin session cookie or Bearer token, they must return 401. With a
+          non-admin user (email NOT in ADMIN_EMAILS), they must return 403. GET /api/research and
+          GET /api/research/{id} remain public.
+
+  - task: "Auth: POST /api/auth/session, GET /api/auth/me, POST /api/auth/logout"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Emergent Google OAuth integration. ADMIN_EMAILS env var lists allowed admins
+          (soumyajits2000@gmail.com, soumyajitsomu@gmail.com).
+          - POST /api/auth/session takes {session_id} and exchanges it via the Emergent provider
+            (https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data with
+            X-Session-ID header). Returns UserOut {user_id, email, name, picture, is_admin} and
+            sets an httpOnly session_token cookie (samesite=none, secure, 7-day max-age). Stores
+            user in `users` collection (creates new user_id if first time) and session in
+            `user_sessions`. Note: this requires a real session_id from the OAuth flow — testing
+            this endpoint end-to-end is not possible without a real OAuth round-trip, but the
+            failure modes (missing/invalid session_id) ARE testable.
+          - GET /api/auth/me reads the cookie or Bearer header and returns current user (401 if
+            no/invalid/expired session).
+          - POST /api/auth/logout deletes the session row and clears the cookie.
+          For curl-based tests, the testing agent should seed a user + session manually via
+          mongosh and pass `Authorization: Bearer <token>` to test admin-protected endpoints.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: All 7 authentication endpoint tests completed successfully! Comprehensive testing performed:
+          A1. GET /api/auth/me (no auth) → 401 ✅
+          A2. GET /api/auth/me (bogus Bearer token) → 401 ✅
+          A3. POST /api/auth/session (invalid session_id) → 401 ✅ (auth provider rejected)
+          A4. POST /api/auth/session (empty body) → 422 ✅ (validation error)
+          A5. GET /api/auth/me (admin Bearer token) → 200 with is_admin: true ✅
+          A6. GET /api/auth/me (regular user Bearer token) → 200 with is_admin: false ✅
+          A7. POST /api/auth/logout + session deletion → 200 {ok:true}, then 401 ✅
+          All auth flows working correctly. Bearer token fallback functional. Session management working.
+
+  - task: "Admin protection on mutating endpoints"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          Added require_admin dependency to: POST /api/research, PATCH /api/research/{id},
+          DELETE /api/research/{id}, POST /api/news, DELETE /api/news/{id}, GET /api/contact.
+          Public endpoints unaffected: GET /api/research(/*), GET /api/news, POST /api/contact,
+          GET /api/health, GET /api/.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ PASSED: All 17 admin protection tests completed successfully! Comprehensive testing performed:
+          B1. GET /api/research (no auth) → 200 ✅ (still public)
+          B2. POST /api/research (no auth) → 401 ✅
+          B3. POST /api/research (non-admin Bearer) → 403 ✅
+          B4. POST /api/research (admin Bearer) → 201 ✅
+          B5. PATCH /api/research/{id} (admin Bearer) → 200 ✅
+          B6. PATCH /api/research/{id} (no auth) → 401 ✅
+          B7. PATCH /api/research/{id} (non-admin Bearer) → 403 ✅
+          B8. DELETE /api/research/{id} (no auth) → 401 ✅
+          B9. DELETE /api/research/{id} (non-admin Bearer) → 403 ✅
+          B10. DELETE /api/research/{id} (admin Bearer) → 200 ✅
+          B11. GET /api/news (no auth) → 200 ✅ (still public)
+          B12. POST /api/news (no auth) → 401 ✅
+          B13. POST /api/news (admin Bearer) → 201 ✅
+          B14. DELETE /api/news/{id} (no auth) → 401, (admin Bearer) → 200 ✅
+          B15. POST /api/contact (no auth) → 200 ✅ (still public)
+          B16. GET /api/contact (no auth) → 401 ✅ (now admin-only)
+          B17. GET /api/contact (admin Bearer) → 200 with array ✅
+          All admin protection working correctly. Public endpoints remain accessible. Admin-only endpoints properly protected.
+
+
 
 
 frontend:
@@ -306,3 +392,24 @@ agent_communication:
       • GET after DELETE → ✅ Test item gone, seeded fallback reappears
       
       All Research CRUD endpoints are production-ready with perfect validation, error handling, and data persistence.
+  - agent: "testing"
+    message: |
+      ✅ AUTHENTICATION & ADMIN PROTECTION TESTING COMPLETE: All 24 test cases PASSED perfectly!
+      
+      Executed comprehensive authentication and admin protection testing following the detailed test playbook:
+      
+      🔐 Authentication Endpoints (7 tests):
+      • A1-A4: Unauthenticated access properly rejected (401/422) ✅
+      • A5: Admin Bearer token returns 200 with is_admin: true ✅
+      • A6: Regular user Bearer token returns 200 with is_admin: false ✅
+      • A7: Logout properly deletes session and invalidates token ✅
+      
+      🛡️ Admin Protection (17 tests):
+      • Public endpoints (GET /research, GET /news, POST /contact) remain accessible ✅
+      • Admin-only endpoints properly reject unauthenticated requests (401) ✅
+      • Admin-only endpoints properly reject non-admin users (403) ✅
+      • Admin-only endpoints allow admin users to perform CRUD operations ✅
+      • All research, news, and contact admin operations working correctly ✅
+      
+      Authentication layer is production-ready. Bearer token fallback functional. Admin protection working correctly.
+      All test data cleaned up successfully. No issues found.

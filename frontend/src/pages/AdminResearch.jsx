@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Plus,
@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Loader2,
   RefreshCw,
+  LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../lib/api";
@@ -56,10 +57,38 @@ const formToPayload = (f) => ({
 const isSeed = (id) => typeof id === "string" && id.startsWith("seed-");
 
 const AdminResearch = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [me, setMe] = useState(location.state?.user || null);
+  const [authChecked, setAuthChecked] = useState(!!location.state?.user);
+
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [showNew, setShowNew] = useState(false);
+
+  // Auth gate \u2014 if no user passed via navigation state, verify with backend.
+  useEffect(() => {
+    if (location.state?.user) return;
+    let cancelled = false;
+    api
+      .get("/auth/me")
+      .then((r) => {
+        if (cancelled) return;
+        if (r.data?.is_admin) {
+          setMe(r.data);
+          setAuthChecked(true);
+        } else {
+          navigate("/admin/login", { replace: true, state: { error: "not_admin" } });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) navigate("/admin/login", { replace: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, location.state]);
 
   const load = async () => {
     setLoading(true);
@@ -74,8 +103,30 @@ const AdminResearch = () => {
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    if (authChecked) load();
+  }, [authChecked]);
+
+  const handleLogout = async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch (e) {
+      // ignore
+    }
+    navigate("/admin/login", { replace: true });
+  };
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-[#3a3a3a]">
+        <div className="inline-flex items-center gap-3">
+          <Loader2 size={18} className="animate-spin" />
+          <span className="font-serif italic text-[16px]">
+            Verifying your session…
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const persistFromSeed = async (item) => {
     // Promote a seed item to a real DB row by POSTing it, then return new id.
@@ -148,23 +199,43 @@ const AdminResearch = () => {
     <div className="min-h-screen text-[#1A1A1A]">
       {/* Slim admin header */}
       <header className="sticky top-0 z-40 bg-[#FBF9F4]/90 backdrop-blur-md border-b border-[#E5DFCE]">
-        <div className="max-w-[1180px] mx-auto px-6 md:px-12 lg:px-16 h-16 flex items-center justify-between">
+        <div className="max-w-[1180px] mx-auto px-6 md:px-12 lg:px-16 h-16 flex items-center justify-between gap-4">
           <Link
             to="/"
             className="inline-flex items-center gap-2 text-[12px] tracking-[0.18em] uppercase text-[#3a3a3a] hover:text-[#7A2828] transition-colors"
           >
             <ArrowLeft size={14} /> Back to site
           </Link>
-          <p className="font-serif text-lg tracking-tight">
+          <p className="font-serif text-lg tracking-tight hidden sm:block">
             Admin <span className="text-[#7A2828]">·</span> Research
           </p>
-          <button
-            onClick={load}
-            className="inline-flex items-center gap-2 text-[12px] tracking-[0.14em] uppercase text-[#3a3a3a] hover:text-[#1A1A1A]"
-            aria-label="Refresh"
-          >
-            <RefreshCw size={14} /> Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            {me && (
+              <span className="hidden md:inline-flex items-center gap-2 text-[12px] text-[#3a3a3a]">
+                {me.picture && (
+                  <img
+                    src={me.picture}
+                    alt=""
+                    className="w-6 h-6 rounded-full ring-1 ring-[#D9D4C7]"
+                  />
+                )}
+                <span className="font-mono text-[11px]">{me.email}</span>
+              </span>
+            )}
+            <button
+              onClick={load}
+              className="inline-flex items-center gap-2 text-[12px] tracking-[0.14em] uppercase text-[#3a3a3a] hover:text-[#1A1A1A]"
+              aria-label="Refresh"
+            >
+              <RefreshCw size={14} /> Refresh
+            </button>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 text-[12px] tracking-[0.14em] uppercase text-[#7A2828] hover:text-[#1A1A1A]"
+            >
+              <LogOut size={14} /> Sign out
+            </button>
+          </div>
         </div>
       </header>
 

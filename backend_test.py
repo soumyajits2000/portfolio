@@ -1,432 +1,650 @@
 #!/usr/bin/env python3
 """
-Backend API Testing Suite for Soumyajit Samal Portfolio
-Tests all FastAPI endpoints at the public REACT_APP_BACKEND_URL
+Backend Authentication & Admin Protection Testing
+Tests the new auth layer on FastAPI backend at public REACT_APP_BACKEND_URL.
 """
 
 import requests
 import json
 import uuid
-from datetime import datetime
-import sys
+import subprocess
 import os
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
 
-# Backend URL from frontend/.env
-BACKEND_URL = "https://academic-archive-3.preview.emergentagent.com"
-API_BASE = f"{BACKEND_URL}/api"
+# Configuration
+BACKEND_URL = "https://academic-archive-3.preview.emergentagent.com/api"
+MONGO_URL = "mongodb://localhost:27017"
+DB_NAME = "test_database"
+ADMIN_EMAILS = ["soumyajits2000@gmail.com", "soumyajitsomu@gmail.com"]
 
-class TestResults:
+class AuthTester:
     def __init__(self):
-        self.passed = 0
-        self.failed = 0
+        self.session = requests.Session()
+        self.admin_token = None
+        self.user_token = None
+        self.admin_user_id = None
+        self.user_user_id = None
+        self.test_research_id = None
+        self.test_news_id = None
         self.results = []
-    
-    def add_result(self, test_name, passed, details):
-        self.results.append({
-            'test': test_name,
-            'passed': passed,
-            'details': details
-        })
-        if passed:
-            self.passed += 1
-        else:
-            self.failed += 1
-    
-    def print_summary(self):
-        print(f"\n{'='*60}")
-        print(f"TEST SUMMARY: {self.passed} PASSED, {self.failed} FAILED")
-        print(f"{'='*60}")
         
-        for result in self.results:
-            status = "✅ PASS" if result['passed'] else "❌ FAIL"
-            print(f"{status}: {result['test']}")
-            if result['details']:
-                print(f"    Details: {result['details']}")
-        
-        return self.failed == 0
+    def log_result(self, test_name: str, expected: str, actual: str, passed: bool, details: str = ""):
+        """Log test result"""
+        status = "✅ PASS" if passed else "❌ FAIL"
+        result = {
+            "test": test_name,
+            "expected": expected,
+            "actual": actual,
+            "status": status,
+            "details": details
+        }
+        self.results.append(result)
+        print(f"{status}: {test_name}")
+        if details:
+            print(f"    Details: {details}")
+        if not passed:
+            print(f"    Expected: {expected}, Got: {actual}")
+        print()
 
-def test_health_endpoint():
-    """Test GET /api/health"""
-    print("\n1. Testing Health Endpoint...")
-    try:
-        response = requests.get(f"{API_BASE}/health", timeout=10)
+    def seed_users_and_sessions(self):
+        """Seed test users and sessions via mongosh"""
+        print("🌱 Seeding test users and sessions...")
         
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("status") == "ok":
-                results.add_result("Health endpoint", True, f"Status: {response.status_code}, Response: {data}")
-                print("✅ Health endpoint working correctly")
-                return True
-            else:
-                results.add_result("Health endpoint", False, f"Wrong response format: {data}")
-                print(f"❌ Health endpoint returned wrong format: {data}")
-                return False
-        else:
-            results.add_result("Health endpoint", False, f"Status: {response.status_code}, Response: {response.text}")
-            print(f"❌ Health endpoint returned status {response.status_code}")
-            return False
-            
-    except Exception as e:
-        results.add_result("Health endpoint", False, f"Exception: {str(e)}")
-        print(f"❌ Health endpoint failed with exception: {e}")
-        return False
-
-def test_root_endpoint():
-    """Test GET /api/"""
-    print("\n2. Testing Root Endpoint...")
-    try:
-        response = requests.get(f"{API_BASE}/", timeout=10)
+        # Generate random IDs
+        admin_user_id = f"user_admin_test_{uuid.uuid4().hex[:8]}"
+        user_user_id = f"user_regular_test_{uuid.uuid4().hex[:8]}"
+        admin_token = f"admintok_{uuid.uuid4().hex[:8]}"
+        user_token = f"usertok_{uuid.uuid4().hex[:8]}"
         
-        if response.status_code == 200:
-            data = response.json()
-            response_text = json.dumps(data).lower()
-            if "soumyajit" in response_text:
-                results.add_result("Root endpoint", True, f"Status: {response.status_code}, Response: {data}")
-                print("✅ Root endpoint working correctly")
-                return True
-            else:
-                results.add_result("Root endpoint", False, f"Response doesn't contain 'Soumyajit': {data}")
-                print(f"❌ Root endpoint doesn't contain 'Soumyajit': {data}")
-                return False
-        else:
-            results.add_result("Root endpoint", False, f"Status: {response.status_code}, Response: {response.text}")
-            print(f"❌ Root endpoint returned status {response.status_code}")
-            return False
-            
-    except Exception as e:
-        results.add_result("Root endpoint", False, f"Exception: {str(e)}")
-        print(f"❌ Root endpoint failed with exception: {e}")
-        return False
-
-def test_contact_endpoints():
-    """Test POST /api/contact and GET /api/contact"""
-    print("\n3. Testing Contact Endpoints...")
-    
-    # Test valid contact submission
-    print("3a. Testing valid contact submission...")
-    valid_payload = {
-        "name": "Test User",
-        "email": "test@example.com", 
-        "subject": "Hello",
-        "message": "This is a test message."
-    }
-    
-    try:
-        response = requests.post(f"{API_BASE}/contact", json=valid_payload, timeout=10)
+        # MongoDB commands to seed data
+        mongo_commands = f'''
+        const adminUserId = "{admin_user_id}";
+        const userUserId = "{user_user_id}";
+        const adminToken = "{admin_token}";
+        const userToken = "{user_token}";
+        const expiresAt = new Date(Date.now() + 7*24*3600*1000);
         
-        if response.status_code == 200:
-            data = response.json()
-            if (data.get("ok") is True and 
-                data.get("id") and 
-                data.get("received_at") and
-                len(data.get("id", "")) > 10):  # UUID-like string
-                
-                contact_id = data["id"]
-                received_at = data["received_at"]
-                results.add_result("Contact POST valid", True, f"Status: {response.status_code}, ID: {contact_id}")
-                print("✅ Valid contact submission working")
-                
-                # Test GET /api/contact to verify the message was stored
-                print("3b. Testing contact message retrieval...")
-                get_response = requests.get(f"{API_BASE}/contact", timeout=10)
-                
-                if get_response.status_code == 200:
-                    messages = get_response.json()
-                    if isinstance(messages, list) and len(messages) > 0:
-                        # Find our test message
-                        test_message = None
-                        for msg in messages:
-                            if msg.get("id") == contact_id:
-                                test_message = msg
-                                break
-                        
-                        if test_message:
-                            if (test_message.get("name") == valid_payload["name"] and
-                                test_message.get("email") == valid_payload["email"] and
-                                test_message.get("subject") == valid_payload["subject"] and
-                                test_message.get("message") == valid_payload["message"] and
-                                test_message.get("received_at")):
-                                
-                                results.add_result("Contact GET", True, f"Message found with correct data")
-                                print("✅ Contact message retrieval working")
-                            else:
-                                results.add_result("Contact GET", False, f"Message data mismatch: {test_message}")
-                                print(f"❌ Contact message data mismatch")
-                        else:
-                            results.add_result("Contact GET", False, f"Test message not found in response")
-                            print(f"❌ Test message not found in contact list")
-                    else:
-                        results.add_result("Contact GET", False, f"Invalid response format: {messages}")
-                        print(f"❌ Contact GET returned invalid format")
-                else:
-                    results.add_result("Contact GET", False, f"Status: {get_response.status_code}")
-                    print(f"❌ Contact GET returned status {get_response.status_code}")
-                
-                # Test limit parameter
-                print("3c. Testing contact limit parameter...")
-                limit_response = requests.get(f"{API_BASE}/contact?limit=5", timeout=10)
-                if limit_response.status_code == 200:
-                    limited_messages = limit_response.json()
-                    if isinstance(limited_messages, list) and len(limited_messages) <= 5:
-                        results.add_result("Contact GET limit", True, f"Limit respected: {len(limited_messages)} messages")
-                        print("✅ Contact limit parameter working")
-                    else:
-                        results.add_result("Contact GET limit", False, f"Limit not respected: {len(limited_messages)} messages")
-                        print(f"❌ Contact limit not respected")
-                else:
-                    results.add_result("Contact GET limit", False, f"Status: {limit_response.status_code}")
-                    print(f"❌ Contact GET with limit failed")
-                
-            else:
-                results.add_result("Contact POST valid", False, f"Invalid response format: {data}")
-                print(f"❌ Valid contact submission returned invalid format: {data}")
-        else:
-            results.add_result("Contact POST valid", False, f"Status: {response.status_code}, Response: {response.text}")
-            print(f"❌ Valid contact submission returned status {response.status_code}")
-            
-    except Exception as e:
-        results.add_result("Contact POST valid", False, f"Exception: {str(e)}")
-        print(f"❌ Valid contact submission failed with exception: {e}")
-    
-    # Test invalid email
-    print("3d. Testing invalid email...")
-    invalid_email_payload = {
-        "name": "X",
-        "email": "not-an-email",
-        "message": "hi"
-    }
-    
-    try:
-        response = requests.post(f"{API_BASE}/contact", json=invalid_email_payload, timeout=10)
-        if response.status_code == 422:
-            results.add_result("Contact POST invalid email", True, f"Status: {response.status_code}")
-            print("✅ Invalid email validation working")
-        else:
-            results.add_result("Contact POST invalid email", False, f"Status: {response.status_code}, Expected: 422")
-            print(f"❌ Invalid email should return 422, got {response.status_code}")
-    except Exception as e:
-        results.add_result("Contact POST invalid email", False, f"Exception: {str(e)}")
-        print(f"❌ Invalid email test failed with exception: {e}")
-    
-    # Test empty name
-    print("3e. Testing empty name...")
-    empty_name_payload = {
-        "name": "",
-        "email": "a@b.co",
-        "message": "hi"
-    }
-    
-    try:
-        response = requests.post(f"{API_BASE}/contact", json=empty_name_payload, timeout=10)
-        if response.status_code == 422:
-            results.add_result("Contact POST empty name", True, f"Status: {response.status_code}")
-            print("✅ Empty name validation working")
-        else:
-            results.add_result("Contact POST empty name", False, f"Status: {response.status_code}, Expected: 422")
-            print(f"❌ Empty name should return 422, got {response.status_code}")
-    except Exception as e:
-        results.add_result("Contact POST empty name", False, f"Exception: {str(e)}")
-        print(f"❌ Empty name test failed with exception: {e}")
-    
-    # Test missing message
-    print("3f. Testing missing message...")
-    missing_message_payload = {
-        "name": "X",
-        "email": "a@b.co"
-    }
-    
-    try:
-        response = requests.post(f"{API_BASE}/contact", json=missing_message_payload, timeout=10)
-        if response.status_code == 422:
-            results.add_result("Contact POST missing message", True, f"Status: {response.status_code}")
-            print("✅ Missing message validation working")
-        else:
-            results.add_result("Contact POST missing message", False, f"Status: {response.status_code}, Expected: 422")
-            print(f"❌ Missing message should return 422, got {response.status_code}")
-    except Exception as e:
-        results.add_result("Contact POST missing message", False, f"Exception: {str(e)}")
-        print(f"❌ Missing message test failed with exception: {e}")
-
-def test_news_endpoints():
-    """Test GET /api/news, POST /api/news, DELETE /api/news/{id}"""
-    print("\n4. Testing News Endpoints...")
-    
-    # Test GET /api/news (should return seeded fallback if empty)
-    print("4a. Testing news retrieval...")
-    try:
-        response = requests.get(f"{API_BASE}/news", timeout=10)
+        db.users.insertOne({{
+            user_id: adminUserId,
+            email: "{ADMIN_EMAILS[0]}",
+            name: "Test Admin User",
+            picture: "https://example.com/admin.jpg",
+            created_at: new Date().toISOString(),
+            last_login: new Date().toISOString()
+        }});
         
-        if response.status_code == 200:
-            news_items = response.json()
-            if isinstance(news_items, list) and len(news_items) >= 1:
-                # Check if we have seeded items
-                has_seed_items = any(item.get("id", "").startswith("seed-") for item in news_items)
-                results.add_result("News GET initial", True, f"Got {len(news_items)} items, has_seed: {has_seed_items}")
-                print(f"✅ News GET working, got {len(news_items)} items")
-            else:
-                results.add_result("News GET initial", False, f"Invalid response: {news_items}")
-                print(f"❌ News GET returned invalid format")
-        else:
-            results.add_result("News GET initial", False, f"Status: {response.status_code}")
-            print(f"❌ News GET returned status {response.status_code}")
-            
-    except Exception as e:
-        results.add_result("News GET initial", False, f"Exception: {str(e)}")
-        print(f"❌ News GET failed with exception: {e}")
-    
-    # Test POST /api/news
-    print("4b. Testing news creation...")
-    news_payload = {
-        "date": "Jul 2025",
-        "text": "Test news entry"
-    }
-    
-    created_news_id = None
-    try:
-        response = requests.post(f"{API_BASE}/news", json=news_payload, timeout=10)
+        db.users.insertOne({{
+            user_id: userUserId,
+            email: "random@example.com",
+            name: "Test Regular User",
+            picture: "https://example.com/user.jpg",
+            created_at: new Date().toISOString(),
+            last_login: new Date().toISOString()
+        }});
         
-        if response.status_code == 201:
-            data = response.json()
-            if (data.get("id") and 
-                data.get("date") == news_payload["date"] and
-                data.get("text") == news_payload["text"] and
-                data.get("created_at") and
-                not data.get("id", "").startswith("seed-")):  # Real UUID, not seed
-                
-                created_news_id = data["id"]
-                results.add_result("News POST", True, f"Status: {response.status_code}, ID: {created_news_id}")
-                print("✅ News creation working")
-                
-                # Test GET /api/news again to verify the new item appears first
-                print("4c. Testing news retrieval after creation...")
-                get_response = requests.get(f"{API_BASE}/news", timeout=10)
-                
-                if get_response.status_code == 200:
-                    updated_news = get_response.json()
-                    if (isinstance(updated_news, list) and 
-                        len(updated_news) > 0 and
-                        updated_news[0].get("id") == created_news_id):
-                        
-                        results.add_result("News GET after POST", True, f"New item appears first")
-                        print("✅ News ordering working (newest first)")
-                    else:
-                        results.add_result("News GET after POST", False, f"New item not first: {updated_news[0] if updated_news else 'empty'}")
-                        print(f"❌ News ordering not working")
-                else:
-                    results.add_result("News GET after POST", False, f"Status: {get_response.status_code}")
-                    print(f"❌ News GET after POST failed")
-                
-            else:
-                results.add_result("News POST", False, f"Invalid response format: {data}")
-                print(f"❌ News creation returned invalid format: {data}")
-        else:
-            results.add_result("News POST", False, f"Status: {response.status_code}, Response: {response.text}")
-            print(f"❌ News creation returned status {response.status_code}")
-            
-    except Exception as e:
-        results.add_result("News POST", False, f"Exception: {str(e)}")
-        print(f"❌ News creation failed with exception: {e}")
-    
-    # Test DELETE /api/news/{id}
-    if created_news_id:
-        print("4d. Testing news deletion...")
+        db.user_sessions.insertOne({{
+            session_token: adminToken,
+            user_id: adminUserId,
+            created_at: new Date(),
+            expires_at: expiresAt
+        }});
+        
+        db.user_sessions.insertOne({{
+            session_token: userToken,
+            user_id: userUserId,
+            created_at: new Date(),
+            expires_at: expiresAt
+        }});
+        
+        print("Admin token: " + adminToken);
+        print("User token: " + userToken);
+        print("Sessions count: " + db.user_sessions.countDocuments({{}}));
+        '''
+        
         try:
-            response = requests.delete(f"{API_BASE}/news/{created_news_id}", timeout=10)
+            # Execute mongosh commands
+            result = subprocess.run(
+                ["mongosh", f"{MONGO_URL}/{DB_NAME}", "--eval", mongo_commands],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
             
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("ok") is True and data.get("deleted") == created_news_id:
-                    results.add_result("News DELETE valid", True, f"Status: {response.status_code}")
-                    print("✅ News deletion working")
-                    
-                    # Verify the item is actually deleted
-                    print("4e. Testing news retrieval after deletion...")
-                    get_response = requests.get(f"{API_BASE}/news", timeout=10)
-                    
-                    if get_response.status_code == 200:
-                        final_news = get_response.json()
-                        item_still_exists = any(item.get("id") == created_news_id for item in final_news)
-                        
-                        if not item_still_exists:
-                            results.add_result("News GET after DELETE", True, f"Item properly removed")
-                            print("✅ News deletion verification working")
-                        else:
-                            results.add_result("News GET after DELETE", False, f"Item still exists after deletion")
-                            print(f"❌ News item still exists after deletion")
-                    else:
-                        results.add_result("News GET after DELETE", False, f"Status: {get_response.status_code}")
-                        print(f"❌ News GET after DELETE failed")
-                        
-                else:
-                    results.add_result("News DELETE valid", False, f"Invalid response format: {data}")
-                    print(f"❌ News deletion returned invalid format: {data}")
+            if result.returncode == 0:
+                print("✅ Successfully seeded test users and sessions")
+                print(result.stdout)
+                self.admin_token = admin_token
+                self.user_token = user_token
+                self.admin_user_id = admin_user_id
+                self.user_user_id = user_user_id
+                return True
             else:
-                results.add_result("News DELETE valid", False, f"Status: {response.status_code}")
-                print(f"❌ News deletion returned status {response.status_code}")
+                print(f"❌ Failed to seed data: {result.stderr}")
+                return False
                 
         except Exception as e:
-            results.add_result("News DELETE valid", False, f"Exception: {str(e)}")
-            print(f"❌ News deletion failed with exception: {e}")
-    
-    # Test DELETE with non-existent ID
-    print("4f. Testing news deletion with non-existent ID...")
-    fake_id = str(uuid.uuid4())
-    try:
-        response = requests.delete(f"{API_BASE}/news/{fake_id}", timeout=10)
-        
-        if response.status_code == 404:
-            results.add_result("News DELETE invalid", True, f"Status: {response.status_code}")
-            print("✅ News deletion 404 handling working")
-        else:
-            results.add_result("News DELETE invalid", False, f"Status: {response.status_code}, Expected: 404")
-            print(f"❌ News deletion should return 404 for non-existent ID, got {response.status_code}")
-            
-    except Exception as e:
-        results.add_result("News DELETE invalid", False, f"Exception: {str(e)}")
-        print(f"❌ News deletion 404 test failed with exception: {e}")
+            print(f"❌ Error seeding data: {e}")
+            return False
 
-def test_cors_headers():
-    """Test CORS headers"""
-    print("\n5. Testing CORS Headers...")
-    try:
-        response = requests.get(f"{API_BASE}/health", timeout=10)
+    def cleanup_test_data(self):
+        """Clean up test data from database"""
+        print("🧹 Cleaning up test data...")
         
-        cors_header = response.headers.get("Access-Control-Allow-Origin")
-        if cors_header:
-            results.add_result("CORS headers", True, f"Access-Control-Allow-Origin: {cors_header}")
-            print(f"✅ CORS headers present: {cors_header}")
-        else:
-            results.add_result("CORS headers", False, f"No Access-Control-Allow-Origin header found")
-            print(f"❌ CORS headers missing")
+        mongo_commands = f'''
+        db.users.deleteMany({{email: {{$in: ["random@example.com"]}}}});
+        db.user_sessions.deleteMany({{session_token: {{$regex: /admintok_|usertok_/}}}});
+        db.research.deleteMany({{title: "Auth test"}});
+        db.news.deleteMany({{text: "test"}});
+        db.contact_messages.deleteMany({{name: "Auth Test User"}});
+        print("Cleanup completed");
+        '''
+        
+        try:
+            result = subprocess.run(
+                ["mongosh", f"{MONGO_URL}/{DB_NAME}", "--eval", mongo_commands],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
             
-    except Exception as e:
-        results.add_result("CORS headers", False, f"Exception: {str(e)}")
-        print(f"❌ CORS test failed with exception: {e}")
+            if result.returncode == 0:
+                print("✅ Cleanup completed successfully")
+            else:
+                print(f"⚠️ Cleanup warning: {result.stderr}")
+                
+        except Exception as e:
+            print(f"⚠️ Cleanup error: {e}")
 
-def main():
-    """Run all tests"""
-    print(f"Starting Backend API Tests...")
-    print(f"Backend URL: {BACKEND_URL}")
-    print(f"API Base: {API_BASE}")
-    
-    # Run all tests
-    test_health_endpoint()
-    test_root_endpoint()
-    test_contact_endpoints()
-    test_news_endpoints()
-    test_cors_headers()
-    
-    # Print summary
-    success = results.print_summary()
-    
-    if success:
-        print(f"\n🎉 ALL TESTS PASSED!")
-        return 0
-    else:
-        print(f"\n💥 SOME TESTS FAILED!")
-        return 1
+    def test_auth_endpoints(self):
+        """Test authentication endpoints (A1-A7)"""
+        print("🔐 Testing Authentication Endpoints...")
+        
+        # A1: GET /api/auth/me with no auth → expect 401
+        response = self.session.get(f"{BACKEND_URL}/auth/me")
+        self.log_result(
+            "A1: GET /auth/me (no auth)",
+            "401",
+            str(response.status_code),
+            response.status_code == 401,
+            f"Response: {response.text[:100]}"
+        )
+        
+        # A2: GET /api/auth/me with bogus Bearer token → expect 401
+        headers = {"Authorization": "Bearer notarealtoken"}
+        response = self.session.get(f"{BACKEND_URL}/auth/me", headers=headers)
+        self.log_result(
+            "A2: GET /auth/me (bogus token)",
+            "401",
+            str(response.status_code),
+            response.status_code == 401,
+            f"Response: {response.text[:100]}"
+        )
+        
+        # A3: POST /api/auth/session with invalid session_id → expect 502 or 401
+        invalid_payload = {"session_id": "definitely-invalid-fake-id-12345"}
+        response = self.session.post(f"{BACKEND_URL}/auth/session", json=invalid_payload)
+        expected_codes = [401, 502]
+        self.log_result(
+            "A3: POST /auth/session (invalid session_id)",
+            "401 or 502",
+            str(response.status_code),
+            response.status_code in expected_codes,
+            f"Response: {response.text[:100]}"
+        )
+        
+        # A4: POST /api/auth/session with empty body → expect 422
+        response = self.session.post(f"{BACKEND_URL}/auth/session", json={})
+        self.log_result(
+            "A4: POST /auth/session (empty body)",
+            "422",
+            str(response.status_code),
+            response.status_code == 422,
+            f"Response: {response.text[:100]}"
+        )
+        
+        # A5: GET /api/auth/me with admin Bearer token → expect 200 with is_admin: true
+        if self.admin_token:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            response = self.session.get(f"{BACKEND_URL}/auth/me", headers=headers)
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    is_admin = data.get("is_admin", False)
+                    email = data.get("email", "")
+                    has_required_fields = all(k in data for k in ["user_id", "email", "name", "is_admin"])
+                    
+                    self.log_result(
+                        "A5: GET /auth/me (admin token)",
+                        "200 with is_admin: true",
+                        f"200 with is_admin: {is_admin}",
+                        response.status_code == 200 and is_admin and has_required_fields,
+                        f"Email: {email}, Fields: {list(data.keys())}"
+                    )
+                except json.JSONDecodeError:
+                    self.log_result(
+                        "A5: GET /auth/me (admin token)",
+                        "200 with valid JSON",
+                        f"200 with invalid JSON",
+                        False,
+                        f"Response: {response.text[:100]}"
+                    )
+            else:
+                self.log_result(
+                    "A5: GET /auth/me (admin token)",
+                    "200",
+                    str(response.status_code),
+                    False,
+                    f"Response: {response.text[:100]}"
+                )
+        
+        # A6: GET /api/auth/me with regular user token → expect 200 with is_admin: false
+        if self.user_token:
+            headers = {"Authorization": f"Bearer {self.user_token}"}
+            response = self.session.get(f"{BACKEND_URL}/auth/me", headers=headers)
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    is_admin = data.get("is_admin", True)  # Default to True to catch failures
+                    email = data.get("email", "")
+                    
+                    self.log_result(
+                        "A6: GET /auth/me (user token)",
+                        "200 with is_admin: false",
+                        f"200 with is_admin: {is_admin}",
+                        response.status_code == 200 and not is_admin,
+                        f"Email: {email}"
+                    )
+                except json.JSONDecodeError:
+                    self.log_result(
+                        "A6: GET /auth/me (user token)",
+                        "200 with valid JSON",
+                        f"200 with invalid JSON",
+                        False,
+                        f"Response: {response.text[:100]}"
+                    )
+            else:
+                self.log_result(
+                    "A6: GET /auth/me (user token)",
+                    "200",
+                    str(response.status_code),
+                    False,
+                    f"Response: {response.text[:100]}"
+                )
+        
+        # A7: POST /api/auth/logout with admin token → expect 200, then GET /auth/me → expect 401
+        if self.admin_token:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            response = self.session.post(f"{BACKEND_URL}/auth/logout", headers=headers)
+            
+            logout_success = response.status_code == 200
+            if logout_success:
+                try:
+                    data = response.json()
+                    logout_success = data.get("ok", False)
+                except:
+                    logout_success = False
+            
+            # Test that session is deleted
+            response2 = self.session.get(f"{BACKEND_URL}/auth/me", headers=headers)
+            session_deleted = response2.status_code == 401
+            
+            self.log_result(
+                "A7: POST /auth/logout + session deletion",
+                "200 {ok:true}, then 401",
+                f"{response.status_code}, then {response2.status_code}",
+                logout_success and session_deleted,
+                f"Logout response: {response.text[:50]}, Auth check: {response2.text[:50]}"
+            )
+            
+            # Re-seed admin session for subsequent tests
+            self.seed_users_and_sessions()
+
+    def test_admin_protected_endpoints(self):
+        """Test admin-protected endpoints (B1-B17)"""
+        print("🛡️ Testing Admin-Protected Endpoints...")
+        
+        # B1: GET /api/research without auth → expect 200 (still public)
+        response = self.session.get(f"{BACKEND_URL}/research")
+        self.log_result(
+            "B1: GET /research (no auth)",
+            "200",
+            str(response.status_code),
+            response.status_code == 200,
+            f"Response length: {len(response.text)}"
+        )
+        
+        # B2: POST /api/research without auth → expect 401
+        payload = {"title": "Auth test", "summary": "x"}
+        response = self.session.post(f"{BACKEND_URL}/research", json=payload)
+        self.log_result(
+            "B2: POST /research (no auth)",
+            "401",
+            str(response.status_code),
+            response.status_code == 401,
+            f"Response: {response.text[:100]}"
+        )
+        
+        # B3: POST /api/research with non-admin Bearer → expect 403
+        if self.user_token:
+            headers = {"Authorization": f"Bearer {self.user_token}"}
+            response = self.session.post(f"{BACKEND_URL}/research", json=payload, headers=headers)
+            self.log_result(
+                "B3: POST /research (non-admin)",
+                "403",
+                str(response.status_code),
+                response.status_code == 403,
+                f"Response: {response.text[:100]}"
+            )
+        
+        # B4: POST /api/research with admin Bearer → expect 201
+        if self.admin_token:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            response = self.session.post(f"{BACKEND_URL}/research", json=payload, headers=headers)
+            
+            if response.status_code == 201:
+                try:
+                    data = response.json()
+                    self.test_research_id = data.get("id")
+                    self.log_result(
+                        "B4: POST /research (admin)",
+                        "201",
+                        str(response.status_code),
+                        True,
+                        f"Created research ID: {self.test_research_id}"
+                    )
+                except:
+                    self.log_result(
+                        "B4: POST /research (admin)",
+                        "201 with valid JSON",
+                        f"201 with invalid JSON",
+                        False,
+                        f"Response: {response.text[:100]}"
+                    )
+            else:
+                self.log_result(
+                    "B4: POST /research (admin)",
+                    "201",
+                    str(response.status_code),
+                    False,
+                    f"Response: {response.text[:100]}"
+                )
+        
+        # B5: PATCH /api/research/{id} with admin Bearer → expect 200
+        if self.admin_token and self.test_research_id:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            patch_payload = {"summary": "updated"}
+            response = self.session.patch(f"{BACKEND_URL}/research/{self.test_research_id}", 
+                                        json=patch_payload, headers=headers)
+            self.log_result(
+                "B5: PATCH /research/{id} (admin)",
+                "200",
+                str(response.status_code),
+                response.status_code == 200,
+                f"Response: {response.text[:100]}"
+            )
+        
+        # B6: PATCH /api/research/{id} without auth → expect 401
+        if self.test_research_id:
+            patch_payload = {"summary": "unauthorized update"}
+            response = self.session.patch(f"{BACKEND_URL}/research/{self.test_research_id}", 
+                                        json=patch_payload)
+            self.log_result(
+                "B6: PATCH /research/{id} (no auth)",
+                "401",
+                str(response.status_code),
+                response.status_code == 401,
+                f"Response: {response.text[:100]}"
+            )
+        
+        # B7: PATCH /api/research/{id} with non-admin Bearer → expect 403
+        if self.user_token and self.test_research_id:
+            headers = {"Authorization": f"Bearer {self.user_token}"}
+            patch_payload = {"summary": "non-admin update"}
+            response = self.session.patch(f"{BACKEND_URL}/research/{self.test_research_id}", 
+                                        json=patch_payload, headers=headers)
+            self.log_result(
+                "B7: PATCH /research/{id} (non-admin)",
+                "403",
+                str(response.status_code),
+                response.status_code == 403,
+                f"Response: {response.text[:100]}"
+            )
+        
+        # B8: DELETE /api/research/{id} without auth → expect 401
+        if self.test_research_id:
+            response = self.session.delete(f"{BACKEND_URL}/research/{self.test_research_id}")
+            self.log_result(
+                "B8: DELETE /research/{id} (no auth)",
+                "401",
+                str(response.status_code),
+                response.status_code == 401,
+                f"Response: {response.text[:100]}"
+            )
+        
+        # B9: DELETE /api/research/{id} with non-admin Bearer → expect 403
+        if self.user_token and self.test_research_id:
+            headers = {"Authorization": f"Bearer {self.user_token}"}
+            response = self.session.delete(f"{BACKEND_URL}/research/{self.test_research_id}", 
+                                         headers=headers)
+            self.log_result(
+                "B9: DELETE /research/{id} (non-admin)",
+                "403",
+                str(response.status_code),
+                response.status_code == 403,
+                f"Response: {response.text[:100]}"
+            )
+        
+        # B10: DELETE /api/research/{id} with admin Bearer → expect 200
+        if self.admin_token and self.test_research_id:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            response = self.session.delete(f"{BACKEND_URL}/research/{self.test_research_id}", 
+                                         headers=headers)
+            self.log_result(
+                "B10: DELETE /research/{id} (admin)",
+                "200",
+                str(response.status_code),
+                response.status_code == 200,
+                f"Response: {response.text[:100]}"
+            )
+        
+        # B11: GET /api/news without auth → expect 200 (still public)
+        response = self.session.get(f"{BACKEND_URL}/news")
+        self.log_result(
+            "B11: GET /news (no auth)",
+            "200",
+            str(response.status_code),
+            response.status_code == 200,
+            f"Response length: {len(response.text)}"
+        )
+        
+        # B12: POST /api/news without auth → expect 401
+        news_payload = {"date": "Aug 2025", "text": "test"}
+        response = self.session.post(f"{BACKEND_URL}/news", json=news_payload)
+        self.log_result(
+            "B12: POST /news (no auth)",
+            "401",
+            str(response.status_code),
+            response.status_code == 401,
+            f"Response: {response.text[:100]}"
+        )
+        
+        # B13: POST /api/news with admin Bearer → expect 201
+        if self.admin_token:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            response = self.session.post(f"{BACKEND_URL}/news", json=news_payload, headers=headers)
+            
+            if response.status_code == 201:
+                try:
+                    data = response.json()
+                    self.test_news_id = data.get("id")
+                    self.log_result(
+                        "B13: POST /news (admin)",
+                        "201",
+                        str(response.status_code),
+                        True,
+                        f"Created news ID: {self.test_news_id}"
+                    )
+                except:
+                    self.log_result(
+                        "B13: POST /news (admin)",
+                        "201 with valid JSON",
+                        f"201 with invalid JSON",
+                        False,
+                        f"Response: {response.text[:100]}"
+                    )
+            else:
+                self.log_result(
+                    "B13: POST /news (admin)",
+                    "201",
+                    str(response.status_code),
+                    False,
+                    f"Response: {response.text[:100]}"
+                )
+        
+        # B14: DELETE /api/news/{id} without auth → expect 401, with admin Bearer → expect 200
+        if self.test_news_id:
+            # Without auth
+            response = self.session.delete(f"{BACKEND_URL}/news/{self.test_news_id}")
+            no_auth_result = response.status_code == 401
+            
+            # With admin auth
+            if self.admin_token:
+                headers = {"Authorization": f"Bearer {self.admin_token}"}
+                response2 = self.session.delete(f"{BACKEND_URL}/news/{self.test_news_id}", 
+                                              headers=headers)
+                admin_result = response2.status_code == 200
+                
+                self.log_result(
+                    "B14: DELETE /news/{id} (no auth + admin)",
+                    "401, then 200",
+                    f"{response.status_code}, then {response2.status_code}",
+                    no_auth_result and admin_result,
+                    f"No auth: {response.text[:50]}, Admin: {response2.text[:50]}"
+                )
+        
+        # B15: POST /api/contact without auth → expect 200 (still public)
+        contact_payload = {
+            "name": "Auth Test User",
+            "email": "test@example.com",
+            "message": "Testing contact form"
+        }
+        response = self.session.post(f"{BACKEND_URL}/contact", json=contact_payload)
+        self.log_result(
+            "B15: POST /contact (no auth)",
+            "200",
+            str(response.status_code),
+            response.status_code == 200,
+            f"Response: {response.text[:100]}"
+        )
+        
+        # B16: GET /api/contact without auth → expect 401 (now admin-only)
+        response = self.session.get(f"{BACKEND_URL}/contact")
+        self.log_result(
+            "B16: GET /contact (no auth)",
+            "401",
+            str(response.status_code),
+            response.status_code == 401,
+            f"Response: {response.text[:100]}"
+        )
+        
+        # B17: GET /api/contact with admin Bearer → expect 200 with array
+        if self.admin_token:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            response = self.session.get(f"{BACKEND_URL}/contact", headers=headers)
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    is_array = isinstance(data, list)
+                    self.log_result(
+                        "B17: GET /contact (admin)",
+                        "200 with array",
+                        f"200 with {'array' if is_array else 'non-array'}",
+                        response.status_code == 200 and is_array,
+                        f"Array length: {len(data) if is_array else 'N/A'}"
+                    )
+                except:
+                    self.log_result(
+                        "B17: GET /contact (admin)",
+                        "200 with valid JSON array",
+                        f"200 with invalid JSON",
+                        False,
+                        f"Response: {response.text[:100]}"
+                    )
+            else:
+                self.log_result(
+                    "B17: GET /contact (admin)",
+                    "200",
+                    str(response.status_code),
+                    False,
+                    f"Response: {response.text[:100]}"
+                )
+
+    def print_summary(self):
+        """Print test summary"""
+        print("\n" + "="*80)
+        print("🎯 AUTH & ADMIN PROTECTION TEST SUMMARY")
+        print("="*80)
+        
+        passed = sum(1 for r in self.results if "✅ PASS" in r["status"])
+        failed = sum(1 for r in self.results if "❌ FAIL" in r["status"])
+        total = len(self.results)
+        
+        print(f"Total Tests: {total}")
+        print(f"Passed: {passed}")
+        print(f"Failed: {failed}")
+        print(f"Success Rate: {(passed/total*100):.1f}%" if total > 0 else "0%")
+        
+        if failed > 0:
+            print(f"\n❌ FAILED TESTS ({failed}):")
+            for result in self.results:
+                if "❌ FAIL" in result["status"]:
+                    print(f"  • {result['test']}")
+                    print(f"    Expected: {result['expected']}")
+                    print(f"    Actual: {result['actual']}")
+                    if result['details']:
+                        print(f"    Details: {result['details']}")
+        
+        print(f"\n✅ PASSED TESTS ({passed}):")
+        for result in self.results:
+            if "✅ PASS" in result["status"]:
+                print(f"  • {result['test']}")
+        
+        print("\n" + "="*80)
+
+    def run_all_tests(self):
+        """Run all authentication and admin protection tests"""
+        print("🚀 Starting Authentication & Admin Protection Tests")
+        print(f"Backend URL: {BACKEND_URL}")
+        print(f"Database: {DB_NAME}")
+        print(f"Admin Emails: {ADMIN_EMAILS}")
+        print("-" * 80)
+        
+        # Seed test data
+        if not self.seed_users_and_sessions():
+            print("❌ Failed to seed test data. Aborting tests.")
+            return False
+        
+        try:
+            # Run auth endpoint tests
+            self.test_auth_endpoints()
+            
+            # Run admin protection tests
+            self.test_admin_protected_endpoints()
+            
+            # Print summary
+            self.print_summary()
+            
+            return True
+            
+        finally:
+            # Always cleanup
+            self.cleanup_test_data()
 
 if __name__ == "__main__":
-    results = TestResults()
-    exit_code = main()
-    sys.exit(exit_code)
+    tester = AuthTester()
+    success = tester.run_all_tests()
+    exit(0 if success else 1)

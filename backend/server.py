@@ -1,14 +1,16 @@
-from fastapi import FastAPI, APIRouter, HTTPException, status
+from fastapi import FastAPI, APIRouter, HTTPException, status, Depends, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import asyncio
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import requests as http_requests
 
 
 ROOT_DIR = Path(__file__).parent
@@ -19,12 +21,82 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
+# Admin allowlist
+ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("ADMIN_EMAILS", "").split(",")
+    if e.strip()
+}
+
+EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+SESSION_TTL_DAYS = 7
+
 app = FastAPI(title="Soumyajit Samal — Research Portfolio API")
 api_router = APIRouter(prefix="/api")
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _is_admin_email(email: Optional[str]) -> bool:
+    return bool(email) and email.lower() in ADMIN_EMAILS
+
+
+# ---------- Auth helpers ----------
+async def _fetch_emergent_session(session_id: str) -> dict:
+    def _do_call():
+        return http_requests.get(
+            EMERGENT_AUTH_URL,
+            headers={"X-Session-ID": session_id},
+            timeout=10,
+        )
+
+    try:
+        res = await asyncio.to_thread(_do_call)
+    except Exception as exc:
+        logging.exception("Emergent auth call failed")
+        raise HTTPException(status_code=502, detail="Auth provider unreachable") from exc
+
+    if res.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid session_id")
+    return res.json()
+
+
+async def get_current_user(request: Request) -> dict:
+    """Resolve the user from cookie session_token (preferred) or Bearer token."""
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    expires_at = session.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if isinstance(expires_at, datetime):
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            await db.user_sessions.delete_one({"session_token": token})
+            raise HTTPException(status_code=401, detail="Session expired")
+
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if not _is_admin_email(user.get("email")):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
 
 # ---------- Models ----------
@@ -102,6 +174,18 @@ class ResearchItemOut(BaseModel):
     order: int = 0
     created_at: str
     updated_at: Optional[str] = None
+
+
+class SessionExchangeIn(BaseModel):
+    session_id: str = Field(..., min_length=4, max_length=400)
+
+
+class UserOut(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    is_admin: bool
 
 
 # Fallback news (mirrors the mock.js seed; used if collection is empty)
@@ -239,6 +323,96 @@ async def health():
     return {"status": "ok"}
 
 
+# ----- Auth -----
+@api_router.post("/auth/session", response_model=UserOut)
+async def auth_exchange_session(payload: SessionExchangeIn, response: Response):
+    """Exchange a one-time session_id from the OAuth flow for a 7-day session cookie."""
+    data = await _fetch_emergent_session(payload.session_id)
+    email = (data.get("email") or "").lower()
+    name = data.get("name") or email
+    picture = data.get("picture")
+    session_token = data.get("session_token")
+    if not email or not session_token:
+        raise HTTPException(status_code=502, detail="Malformed auth provider response")
+
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    now = datetime.now(timezone.utc)
+    if existing:
+        user_id = existing["user_id"]
+        await db.users.update_one(
+            {"email": email},
+            {"$set": {"name": name, "picture": picture, "last_login": now.isoformat()}},
+        )
+    else:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one(
+            {
+                "user_id": user_id,
+                "email": email,
+                "name": name,
+                "picture": picture,
+                "created_at": now.isoformat(),
+                "last_login": now.isoformat(),
+            }
+        )
+
+    expires_at = now + timedelta(days=SESSION_TTL_DAYS)
+    await db.user_sessions.update_one(
+        {"session_token": session_token},
+        {
+            "$set": {
+                "session_token": session_token,
+                "user_id": user_id,
+                "created_at": now,
+                "expires_at": expires_at,
+            }
+        },
+        upsert=True,
+    )
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        max_age=SESSION_TTL_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
+
+    return UserOut(
+        user_id=user_id,
+        email=email,
+        name=name,
+        picture=picture,
+        is_admin=_is_admin_email(email),
+    )
+
+
+@api_router.get("/auth/me", response_model=UserOut)
+async def auth_me(user: dict = Depends(get_current_user)):
+    return UserOut(
+        user_id=user["user_id"],
+        email=user["email"],
+        name=user.get("name") or user["email"],
+        picture=user.get("picture"),
+        is_admin=_is_admin_email(user["email"]),
+    )
+
+
+@api_router.post("/auth/logout")
+async def auth_logout(request: Request, response: Response):
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+    if token:
+        await db.user_sessions.delete_one({"session_token": token})
+    response.delete_cookie("session_token", path="/", samesite="none", secure=True)
+    return {"ok": True}
+
+
 # ----- Contact -----
 @api_router.post("/contact", response_model=ContactSubmitResponse)
 async def submit_contact(payload: ContactMessageIn):
@@ -259,7 +433,7 @@ async def submit_contact(payload: ContactMessageIn):
 
 
 @api_router.get("/contact", response_model=List[ContactMessageOut])
-async def list_contact_messages(limit: int = 50):
+async def list_contact_messages(limit: int = 50, _: dict = Depends(require_admin)):
     limit = max(1, min(limit, 200))
     cursor = db.contact_messages.find({}, {"_id": 0}).sort("received_at", -1).limit(limit)
     return [ContactMessageOut(**doc) async for doc in cursor]
@@ -281,7 +455,7 @@ async def list_news():
 
 
 @api_router.post("/news", response_model=NewsItemOut, status_code=status.HTTP_201_CREATED)
-async def create_news(payload: NewsItemIn):
+async def create_news(payload: NewsItemIn, _: dict = Depends(require_admin)):
     doc = {
         "id": str(uuid.uuid4()),
         "date": payload.date.strip(),
@@ -293,7 +467,7 @@ async def create_news(payload: NewsItemIn):
 
 
 @api_router.delete("/news/{news_id}")
-async def delete_news(news_id: str):
+async def delete_news(news_id: str, _: dict = Depends(require_admin)):
     res = await db.news.delete_one({"id": news_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="News item not found")
@@ -332,7 +506,7 @@ async def get_research(item_id: str):
 
 
 @api_router.post("/research", response_model=ResearchItemOut, status_code=status.HTTP_201_CREATED)
-async def create_research(payload: ResearchItemIn):
+async def create_research(payload: ResearchItemIn, _: dict = Depends(require_admin)):
     now = _now_iso()
     # next order = current max + 1 (or 0 if empty)
     last = await db.research.find_one({}, sort=[("order", -1)])
@@ -356,7 +530,7 @@ async def create_research(payload: ResearchItemIn):
 
 
 @api_router.patch("/research/{item_id}", response_model=ResearchItemOut)
-async def update_research(item_id: str, patch: ResearchItemPatch):
+async def update_research(item_id: str, patch: ResearchItemPatch, _: dict = Depends(require_admin)):
     update = {k: v for k, v in patch.model_dump(exclude_unset=True).items() if v is not None}
     if "links" in update:
         update["links"] = [
@@ -378,7 +552,7 @@ async def update_research(item_id: str, patch: ResearchItemPatch):
 
 
 @api_router.delete("/research/{item_id}")
-async def delete_research(item_id: str):
+async def delete_research(item_id: str, _: dict = Depends(require_admin)):
     res = await db.research.delete_one({"id": item_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Research item not found")
@@ -391,7 +565,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origin_regex=".*",
     allow_methods=["*"],
     allow_headers=["*"],
 )
