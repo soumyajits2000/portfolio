@@ -5,13 +5,13 @@ import { SectionTitle } from "./About";
 /**
  * Timeline accent colour — change ONE constant to recolour the whole timeline.
  *
- *   Burgundy           → "#7A2828"
+ *   Burgundy           → "#7A2828"   ← current
  *   Deep ink (mono)    → "#1A1A1A"
  *   Forest green       → "#2F5D4F"
  *   Aged brass         → "#8B6F2D"
- *   Slate navy         → "#2D3F5C"   ← current
+ *   Slate navy         → "#2D3F5C"
  */
-const ACCENT = "#2D3F5C";
+const ACCENT = "#7A2828";
 
 const EducationSection = () => {
   return (
