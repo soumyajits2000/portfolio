@@ -1,22 +1,44 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Lock, ArrowLeft, ShieldAlert, Loader2 } from "lucide-react";
+import { ArrowLeft, ShieldAlert, Loader2 } from "lucide-react";
 import { api } from "../lib/api";
 import Footer from "../components/sections/Footer";
+
+const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+const GSI_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [checking, setChecking] = useState(true);
-  const errorState = location.state?.error;
+  const [signingIn, setSigningIn] = useState(false);
+  const [errorState, setErrorState] = useState(location.state?.error || null);
+  const buttonRef = useRef(null);
 
+  const handleCredentialResponse = useCallback(
+    async (credentialResponse) => {
+      setSigningIn(true);
+      setErrorState(null);
+      try {
+        const res = await api.post("/auth/google", {
+          credential: credentialResponse.credential,
+        });
+        if (res.data?.is_admin) {
+          navigate("/admin/research", { replace: true, state: { user: res.data } });
+        } else {
+          setSigningIn(false);
+          setErrorState("not_admin");
+        }
+      } catch (err) {
+        setSigningIn(false);
+        setErrorState("auth_failed");
+      }
+    },
+    [navigate]
+  );
+
+  // If there's already a valid admin session, skip straight to the dashboard.
   useEffect(() => {
-    // If user already has a valid admin session, send them straight to admin
-    if (window.location.hash?.includes("session_id=")) {
-      // AppRouter will route to AuthCallback in this case; do nothing.
-      setChecking(false);
-      return;
-    }
     let cancelled = false;
     api
       .get("/auth/me")
@@ -36,13 +58,41 @@ const AdminLogin = () => {
     };
   }, [navigate]);
 
-  const handleLogin = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/admin/research";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(
-      redirectUrl
-    )}`;
-  };
+  // Load Google Identity Services and render its official sign-in button.
+  useEffect(() => {
+    if (checking || !GOOGLE_CLIENT_ID || !buttonRef.current) return;
+
+    const renderButton = () => {
+      if (!window.google?.accounts?.id || !buttonRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse,
+      });
+      window.google.accounts.id.renderButton(buttonRef.current, {
+        theme: "filled_black",
+        size: "large",
+        shape: "pill",
+        text: "signin_with",
+        width: 320,
+      });
+    };
+
+    if (window.google?.accounts?.id) {
+      renderButton();
+      return;
+    }
+
+    let script = document.querySelector(`script[src="${GSI_SCRIPT_SRC}"]`);
+    if (!script) {
+      script = document.createElement("script");
+      script.src = GSI_SCRIPT_SRC;
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+    script.addEventListener("load", renderButton, { once: true });
+    return () => script.removeEventListener("load", renderButton);
+  }, [checking, handleCredentialResponse]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -98,17 +148,26 @@ const AdminLogin = () => {
             </div>
           )}
 
-          {checking ? (
+          {!GOOGLE_CLIENT_ID ? (
+            <div className="mt-8 border border-[#7A2828]/30 bg-[#7A2828]/5 p-4 text-[13px] leading-relaxed text-[#3a3a3a]">
+              <strong className="text-[#7A2828]">Sign-in isn't configured yet.</strong>{" "}
+              Set <code className="font-mono">REACT_APP_GOOGLE_CLIENT_ID</code> in{" "}
+              <code className="font-mono">frontend/.env</code> — see the README's
+              deployment section.
+            </div>
+          ) : checking ? (
             <div className="mt-12 inline-flex items-center gap-2 text-[#5a5a5a]">
               <Loader2 size={16} className="animate-spin" /> Checking session…
             </div>
           ) : (
-            <button
-              onClick={handleLogin}
-              className="mt-12 w-full inline-flex items-center justify-center gap-3 bg-[#1A1A1A] text-[#FBF9F4] px-6 py-4 hover:bg-[#7A2828] transition-colors text-[12px] tracking-[0.18em] uppercase font-medium"
-            >
-              <Lock size={14} /> Sign in with Google
-            </button>
+            <div className="mt-12">
+              <div ref={buttonRef} />
+              {signingIn && (
+                <div className="mt-4 inline-flex items-center gap-2 text-[#5a5a5a]">
+                  <Loader2 size={16} className="animate-spin" /> Signing you in…
+                </div>
+              )}
+            </div>
           )}
 
           <p className="mt-8 font-mono text-[11px] text-[#5a5a5a] leading-relaxed">

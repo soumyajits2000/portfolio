@@ -9,8 +9,10 @@ from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 import uuid
+import secrets
 from datetime import datetime, timezone, timedelta
-import requests as http_requests
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_auth_requests
 
 
 ROOT_DIR = Path(__file__).parent
@@ -28,8 +30,14 @@ ADMIN_EMAILS = {
     if e.strip()
 }
 
-EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+# Google OAuth client ID — the site's own, from Google Cloud Console (see README).
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 SESSION_TTL_DAYS = 7
+
+# Session cookies need `secure` + `samesite=None` in production (HTTPS).
+# In local dev (no HTTPS) that combination silently gets dropped by browsers,
+# so relax it when ENV=development.
+IS_PRODUCTION = os.environ.get("ENV", "production").lower() != "development"
 
 app = FastAPI(title="Soumyajit Samal — Research Portfolio API")
 api_router = APIRouter(prefix="/api")
@@ -43,24 +51,41 @@ def _is_admin_email(email: Optional[str]) -> bool:
     return bool(email) and email.lower() in ADMIN_EMAILS
 
 
+def _set_session_cookie(response: Response, session_token: str) -> None:
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        max_age=SESSION_TTL_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=IS_PRODUCTION,
+        samesite="none" if IS_PRODUCTION else "lax",
+        path="/",
+    )
+
+
 # ---------- Auth helpers ----------
-async def _fetch_emergent_session(session_id: str) -> dict:
-    def _do_call():
-        return http_requests.get(
-            EMERGENT_AUTH_URL,
-            headers={"X-Session-ID": session_id},
-            timeout=10,
+async def _verify_google_credential(credential: str) -> dict:
+    """Verify a Google Identity Services ID token and return its claims."""
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=500,
+            detail="GOOGLE_CLIENT_ID is not configured on the server",
+        )
+
+    def _do_verify():
+        return google_id_token.verify_oauth2_token(
+            credential, google_auth_requests.Request(), GOOGLE_CLIENT_ID
         )
 
     try:
-        res = await asyncio.to_thread(_do_call)
-    except Exception as exc:
-        logging.exception("Emergent auth call failed")
-        raise HTTPException(status_code=502, detail="Auth provider unreachable") from exc
+        claims = await asyncio.to_thread(_do_verify)
+    except ValueError as exc:
+        logging.info("Google credential verification failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Invalid Google credential") from exc
 
-    if res.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid session_id")
-    return res.json()
+    if not claims.get("email_verified", False):
+        raise HTTPException(status_code=401, detail="Google email is not verified")
+    return claims
 
 
 async def get_current_user(request: Request) -> dict:
@@ -176,8 +201,8 @@ class ResearchItemOut(BaseModel):
     updated_at: Optional[str] = None
 
 
-class SessionExchangeIn(BaseModel):
-    session_id: str = Field(..., min_length=4, max_length=400)
+class GoogleAuthIn(BaseModel):
+    credential: str = Field(..., min_length=4)
 
 
 class UserOut(BaseModel):
@@ -324,16 +349,15 @@ async def health():
 
 
 # ----- Auth -----
-@api_router.post("/auth/session", response_model=UserOut)
-async def auth_exchange_session(payload: SessionExchangeIn, response: Response):
-    """Exchange a one-time session_id from the OAuth flow for a 7-day session cookie."""
-    data = await _fetch_emergent_session(payload.session_id)
-    email = (data.get("email") or "").lower()
-    name = data.get("name") or email
-    picture = data.get("picture")
-    session_token = data.get("session_token")
-    if not email or not session_token:
-        raise HTTPException(status_code=502, detail="Malformed auth provider response")
+@api_router.post("/auth/google", response_model=UserOut)
+async def auth_google(payload: GoogleAuthIn, response: Response):
+    """Verify a Google Identity Services ID token and start a 7-day session cookie."""
+    claims = await _verify_google_credential(payload.credential)
+    email = (claims.get("email") or "").lower()
+    name = claims.get("name") or email
+    picture = claims.get("picture")
+    if not email:
+        raise HTTPException(status_code=401, detail="Google account has no email")
 
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     now = datetime.now(timezone.utc)
@@ -356,29 +380,20 @@ async def auth_exchange_session(payload: SessionExchangeIn, response: Response):
             }
         )
 
+    # Our own opaque session token — independent of Google's ID token, which
+    # is single-use and expires in ~1 hour.
+    session_token = secrets.token_urlsafe(32)
     expires_at = now + timedelta(days=SESSION_TTL_DAYS)
-    await db.user_sessions.update_one(
-        {"session_token": session_token},
+    await db.user_sessions.insert_one(
         {
-            "$set": {
-                "session_token": session_token,
-                "user_id": user_id,
-                "created_at": now,
-                "expires_at": expires_at,
-            }
-        },
-        upsert=True,
+            "session_token": session_token,
+            "user_id": user_id,
+            "created_at": now,
+            "expires_at": expires_at,
+        }
     )
 
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        max_age=SESSION_TTL_DAYS * 24 * 60 * 60,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        path="/",
-    )
+    _set_session_cookie(response, session_token)
 
     return UserOut(
         user_id=user_id,
@@ -409,7 +424,12 @@ async def auth_logout(request: Request, response: Response):
             token = auth_header.split(" ", 1)[1].strip()
     if token:
         await db.user_sessions.delete_one({"session_token": token})
-    response.delete_cookie("session_token", path="/", samesite="none", secure=True)
+    response.delete_cookie(
+        "session_token",
+        path="/",
+        samesite="none" if IS_PRODUCTION else "lax",
+        secure=IS_PRODUCTION,
+    )
     return {"ok": True}
 
 
@@ -566,10 +586,17 @@ async def delete_research(item_id: str, _: dict = Depends(require_admin)):
 # Mount router & middleware
 app.include_router(api_router)
 
+# Comma-separated list of allowed frontend origins, e.g.
+# "https://yourdomain.com,https://www.yourdomain.com". Left unset, CORS falls
+# back to allowing any origin — fine for local dev, not recommended once
+# this is deployed with real admin sessions in play.
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origin_regex=".*",
+    allow_origins=CORS_ORIGINS or [],
+    allow_origin_regex=None if CORS_ORIGINS else ".*",
     allow_methods=["*"],
     allow_headers=["*"],
 )
