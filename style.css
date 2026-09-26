@@ -72,9 +72,9 @@ p { margin: 0 0 1em; }
   padding-block: clamp(48px, 9vw, 110px) clamp(40px, 6vw, 72px);
 }
 .eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: .75rem; color: var(--accent); margin-bottom: 14px; }
-.hero h1 { font-size: clamp(2.3rem, 6vw, 3.6rem); margin-bottom: 20px; letter-spacing: -0.035em; }
+.hero h1 { font-size: clamp(2.3rem, 6vw, 3.6rem); margin-bottom: 8px; letter-spacing: -0.035em; }
 .lede { font-size: clamp(1.08rem, 2vw, 1.25rem); font-weight: 300; line-height: 1.6; max-width: 40ch; }
-.affil { color: var(--muted); }
+.affil { color: var(--muted); font-size: 1.05rem; margin-bottom: 22px; }
 .hero-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
 .hero-photo { margin: 0; }
 .hero-photo img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 50%; border: 1px solid var(--line); }
