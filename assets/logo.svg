@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Two hexagonal cells, the top one twisted by 22° (twisted bilayer) -->
+  <polygon points="0,-17 14.72,-8.5 14.72,8.5 0,17 -14.72,8.5 -14.72,-8.5" fill="#7a1f1f" transform="translate(25 26)"/>
+  <polygon points="0,-17 14.72,-8.5 14.72,8.5 0,17 -14.72,8.5 -14.72,-8.5" fill="none" stroke="#111" stroke-width="4.2" stroke-linejoin="round" transform="translate(39 38) rotate(22)"/>
+</svg>

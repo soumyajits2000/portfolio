@@ -1,7 +1,12 @@
 {
   "source": "https://scholar.google.com/citations?user=2VZYvJ0AAAAJ",
-  "updated": "2026-09-26",
+  "updated": "2026-10-13",
   "papers": [
+    {
+      "title": "2D theoretically twistable material database",
+      "cited_by": 22,
+      "link": "https://scholar.google.com/scholar?oi=bibs&hl=en&cites=8804801669733569114"
+    },
     {
       "title": "A review on accelerated development of skin-like MXene electrodes: from experimental to machine learning",
       "cited_by": 14,
